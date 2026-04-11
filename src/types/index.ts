@@ -28,7 +28,6 @@ export type Stage =
   | 'idle'
   | 'loading-index'
   | 'loading-embedder'
-  | 'loading-reranker'
   | 'ready'
   | 'searching'
   | 'error'

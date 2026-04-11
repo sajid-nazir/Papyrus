@@ -169,7 +169,7 @@ export function useMLWorker() {
     return () => {
       worker.terminate()
     }
-  }, [setStage, setSubstep, setDevice, setError, updateProgress, setIndexLoaded, setModelsLoaded, setResults, setAvailableCategories, setSimilarQuery, setIsReranking, setRerankerReady])
+  }, [setStage, setSubstep, setDevice, setError, updateProgress, setIndexLoaded, setModelsLoaded, setResults, setAvailableCategories, setIsReranking, setRerankerReady])
 
   const search = useCallback(
     (query: string, topK = 10, candidates = 300) => {
@@ -194,6 +194,7 @@ export function useMLWorker() {
     (idx: number, title: string) => {
       if (!workerRef.current || !readyRef.current) return
       requestIdRef.current += 1
+      useSearchStore.getState().setError(null)
       setSimilarQuery(title)
       setStage('searching')
       workerRef.current.postMessage({
