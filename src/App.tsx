@@ -6,7 +6,7 @@ import { Results } from './components/Results'
 import './App.css'
 
 function App() {
-  const { search } = useMLWorker()
+  const { search, findSimilar } = useMLWorker()
 
   return (
     <div className="app">
@@ -17,7 +17,7 @@ function App() {
         <SearchBox onSearch={search} />
         <Filters />
         <Progress />
-        <Results />
+        <Results onFindSimilar={findSimilar} />
       </main>
     </div>
   )

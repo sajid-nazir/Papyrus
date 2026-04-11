@@ -147,4 +147,32 @@ header h1 {
   margin: 24px auto;
 }
 
-@keyframes spin { to { transform: rotate(360deg); } }
+.result-actions { margin-top: 6px; }
+
+.find-similar-btn {
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.find-similar-btn:hover { border-color: #888; }
+
+.back-btn {
+  font-size: 0.8rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #555;
+  padding: 0;
+}
+
+.back-btn:hover { color: #111; }
+
+.reranking-indicator {
+  font-size: 0.75rem;
+  color: #888;
+  font-style: italic;
+}
