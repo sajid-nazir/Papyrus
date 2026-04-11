@@ -5,7 +5,7 @@ interface ResultsProps {
 }
 
 export function Results({ onFindSimilar }: ResultsProps) {
-  const { results, stage, query, similarQuery, isReranking } = useSearchStore()
+  const { results, stage, query, similarQuery, isReranking, rerankerReady } = useSearchStore()
 
   if (stage === 'searching' && results.length === 0) {
     return <div className="results-container"><div className="loading-spinner" /></div>
@@ -32,6 +32,11 @@ export function Results({ onFindSimilar }: ResultsProps) {
         {isReranking && <span className="reranking-indicator">Reranking…</span>}
       </div>
 
+      {!rerankerReady && results.length > 0 && (
+        <div className="reranker-banner">
+          Reranker loading — results sorted by embedding similarity only
+        </div>
+      )}
       {results.map((result) => (
         <div key={result.arxiv_id} className="result-card">
           <div className="rank">{result.rank}</div>

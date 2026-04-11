@@ -14,6 +14,8 @@ type WorkerMessageType =
   | 'progress'
   | 'index-loaded'
   | 'models-loaded'
+  | 'reranker-progress'
+  | 'reranker-ready'
   | 'results'
   | 'similar-hamming'
   | 'categories-summary'
@@ -62,6 +64,7 @@ export function useMLWorker() {
     setAvailableCategories,
     setSimilarQuery,
     setIsReranking,
+    setRerankerReady,
   } = useSearchStore()
 
   useEffect(() => {
@@ -104,6 +107,14 @@ export function useMLWorker() {
           setModelsLoaded()
           break
 
+        case 'reranker-progress':
+          // background — do not touch stage FSM
+          break
+
+        case 'reranker-ready':
+          setRerankerReady()
+          break
+
         case 'categories-summary':
           setAvailableCategories(payload as CategorySummary[])
           break
@@ -144,7 +155,7 @@ export function useMLWorker() {
     return () => {
       worker.terminate()
     }
-  }, [setStage, setSubstep, setDevice, setError, updateProgress, setIndexLoaded, setModelsLoaded, setResults, setAvailableCategories, setSimilarQuery, setIsReranking])
+  }, [setStage, setSubstep, setDevice, setError, updateProgress, setIndexLoaded, setModelsLoaded, setResults, setAvailableCategories, setSimilarQuery, setIsReranking, setRerankerReady])
 
   const search = useCallback(
     (query: string, topK = 10, candidates = 300) => {

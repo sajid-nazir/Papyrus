@@ -147,6 +147,13 @@ header h1 {
   margin: 24px auto;
 }
 
+.reranker-banner {
+  font-size: 0.8rem;
+  color: #888;
+  font-style: italic;
+  margin-bottom: 10px;
+}
+
 .result-actions { margin-top: 6px; }
 
 .find-similar-btn {
