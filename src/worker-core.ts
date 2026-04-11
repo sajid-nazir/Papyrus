@@ -231,18 +231,20 @@ export function createSearchWorker(config: ModelConfig): void {
         }
 
         case 'load-models': {
+          // Phase 1: embedder — search becomes available immediately
           self.postMessage({ type: 'stage', payload: 'loading-embedder' })
           self.postMessage({ type: 'substep', payload: 'downloading-model' })
           await EmbedderPipeline.getInstance(config, progressCallback)
           self.postMessage({ type: 'substep', payload: 'initializing' })
-
-          self.postMessage({ type: 'stage', payload: 'loading-reranker' })
-          self.postMessage({ type: 'substep', payload: 'downloading-model' })
-          await Reranker.getInstance(progressCallback)
-          self.postMessage({ type: 'substep', payload: 'initializing' })
-          rerankerReady = true
-
           self.postMessage({ type: 'models-loaded' })
+
+          // Phase 2: reranker loads in background — does NOT touch stage FSM
+          self.postMessage({ type: 'reranker-progress', payload: { status: 'downloading' } })
+          await Reranker.getInstance((data) => {
+            self.postMessage({ type: 'reranker-progress', payload: { status: 'progress', ...data } })
+          })
+          rerankerReady = true
+          self.postMessage({ type: 'reranker-ready' })
           break
         }
 
@@ -297,31 +299,36 @@ export function createSearchWorker(config: ModelConfig): void {
           candidateResults.sort((a, b) => a.dist - b.dist)
           const topCandidates = candidateResults.slice(0, candidates)
 
-          const titles = topCandidates.map((c) => metadata!.titles[c.idx])
-          const scores = await Reranker.rerank(query, titles)
+          if (rerankerReady) {
+            const titles = topCandidates.map((c) => metadata!.titles[c.idx])
+            const scores = await Reranker.rerank(query, titles)
 
-          if (requestId !== undefined && requestId !== currentRequestId) break
+            if (requestId !== undefined && requestId !== currentRequestId) break
 
-          const results = topCandidates.map((c, i) => ({
-            rank: 0,
-            idx: c.idx,
-            arxiv_id: metadata!.arxiv_ids[c.idx],
-            title: metadata!.titles[c.idx],
-            categories: metadata!.categories[c.idx],
-            score: scores[i],
-            hammingDist: c.dist,
-          }))
-
-          results.sort((a, b) => b.score - a.score)
-          for (let i = 0; i < results.length; i++) {
-            results[i].rank = i + 1
+            const results = topCandidates.map((c, i) => ({
+              rank: 0,
+              idx: c.idx,
+              arxiv_id: metadata!.arxiv_ids[c.idx],
+              title: metadata!.titles[c.idx],
+              categories: metadata!.categories[c.idx],
+              score: scores[i],
+              hammingDist: c.dist,
+            }))
+            results.sort((a, b) => b.score - a.score)
+            for (let i = 0; i < results.length; i++) results[i].rank = i + 1
+            self.postMessage({ type: 'results', payload: results.slice(0, topK), requestId })
+          } else {
+            const results = topCandidates.slice(0, topK).map((c, i) => ({
+              rank: i + 1,
+              idx: c.idx,
+              arxiv_id: metadata!.arxiv_ids[c.idx],
+              title: metadata!.titles[c.idx],
+              categories: metadata!.categories[c.idx],
+              score: -c.dist,
+              hammingDist: c.dist,
+            }))
+            self.postMessage({ type: 'results', payload: results, requestId })
           }
-
-          self.postMessage({
-            type: 'results',
-            payload: results.slice(0, topK),
-            requestId,
-          })
           break
         }
 
