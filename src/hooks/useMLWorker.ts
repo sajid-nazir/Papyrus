@@ -103,9 +103,23 @@ export function useMLWorker() {
           break
         }
 
-        case 'models-loaded':
+        case 'models-loaded': {
           setModelsLoaded()
+          const params = new URLSearchParams(window.location.search)
+          const urlQuery = params.get('q')
+          if (urlQuery) {
+            const { filters } = useSearchStore.getState()
+            useSearchStore.getState().setQuery(urlQuery)
+            requestIdRef.current += 1
+            addToHistory(urlQuery)
+            setStage('searching')
+            worker.postMessage({
+              type: 'search',
+              payload: { query: urlQuery, topK: 10, candidates: 300, filters, requestId: requestIdRef.current },
+            })
+          }
           break
+        }
 
         case 'reranker-progress':
           // background — do not touch stage FSM
@@ -164,6 +178,9 @@ export function useMLWorker() {
       const { filters } = useSearchStore.getState()
       addToHistory(query)
       setStage('searching')
+      const url = new URL(window.location.href)
+      url.searchParams.set('q', query)
+      window.history.replaceState(null, '', url.toString())
       workerRef.current.postMessage({
         type: 'search',
         payload: { query, topK, candidates, filters, requestId: requestIdRef.current },

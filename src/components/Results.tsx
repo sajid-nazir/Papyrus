@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useSearchStore } from '../stores/searchStore'
 
 interface ResultsProps {
@@ -6,6 +7,13 @@ interface ResultsProps {
 
 export function Results({ onFindSimilar }: ResultsProps) {
   const { results, stage, query, similarQuery, isReranking, rerankerReady } = useSearchStore()
+  const [copied, setCopied] = useState(false)
+
+  function copyLink() {
+    navigator.clipboard.writeText(window.location.href)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   if (stage === 'searching' && results.length === 0) {
     return <div className="results-container"><div className="loading-spinner" /></div>
@@ -27,6 +35,9 @@ export function Results({ onFindSimilar }: ResultsProps) {
           <>
             <h2 className="results-title">Results</h2>
             <span className="results-meta">{results.length} papers for "{query}"</span>
+            <button className="copy-link-btn" onClick={copyLink}>
+              {copied ? 'Copied!' : 'Copy Link'}
+            </button>
           </>
         )}
         {isReranking && <span className="reranking-indicator">Reranking…</span>}

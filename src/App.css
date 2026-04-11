@@ -147,6 +147,18 @@ header h1 {
   margin: 24px auto;
 }
 
+.copy-link-btn {
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  background: #fff;
+  cursor: pointer;
+  margin-left: auto;
+}
+
+.copy-link-btn:hover { border-color: #888; }
+
 .reranker-banner {
   font-size: 0.8rem;
   color: #888;
