@@ -6,7 +6,7 @@ interface ResultsProps {
 }
 
 export function Results({ onFindSimilar }: ResultsProps) {
-  const { results, stage, query, similarQuery, isReranking, rerankerReady } = useSearchStore()
+  const { results, stage, resultQuery, similarQuery, isReranking, rerankerReady } = useSearchStore()
   const [copied, setCopied] = useState(false)
 
   function copyLink() {
@@ -46,12 +46,12 @@ export function Results({ onFindSimilar }: ResultsProps) {
         ) : (
           <>
             <h2 className="results-title">Results</h2>
-            <span className="results-meta">{results.length} papers for "{query}"</span>
-            <button className="copy-link-btn" onClick={copyLink}>
-              {copied ? 'Copied!' : 'Copy Link'}
-            </button>
+            <span className="results-meta">{results.length} papers for "{resultQuery}"</span>
           </>
         )}
+        <button className="copy-link-btn" onClick={copyLink}>
+          {copied ? 'Copied!' : 'Copy Link'}
+        </button>
         {isReranking && <span className="reranking-indicator">Reranking…</span>}
       </div>
 

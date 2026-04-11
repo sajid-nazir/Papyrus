@@ -19,6 +19,7 @@ interface SearchState {
 
   // Search state
   query: string
+  resultQuery: string
   results: SearchResult[]
   searchHistory: string[]
   filters: FilterState
@@ -59,6 +60,7 @@ const initialState = {
   rerankerReady: false,
   paperCount: 0,
   query: '',
+  resultQuery: '',
   results: [],
   searchHistory: [],
   filters: { categories: [], yearRange: null },
@@ -138,6 +140,7 @@ export const useSearchStore = create<SearchState>()(
       setResults: (results) =>
         set((state) => {
           state.results = results
+          state.resultQuery = state.query
           state.isReranking = false
           if (state.stage === 'searching') state.stage = 'ready'
         }),
