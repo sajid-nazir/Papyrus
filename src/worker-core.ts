@@ -177,6 +177,7 @@ export function createSearchWorker(config: ModelConfig): void {
   let binaryIndex: Uint8Array | null = null
   let metadata: Metadata | null = null
   let currentRequestId = 0
+  let rerankerReady = false
 
   const progressCallback: ProgressCallback = (data) => {
     self.postMessage({ type: 'progress', payload: data })
@@ -320,6 +321,70 @@ export function createSearchWorker(config: ModelConfig): void {
             payload: results.slice(0, topK),
             requestId,
           })
+          break
+        }
+
+        case 'find-similar': {
+          if (!binaryIndex || !metadata) {
+            throw new Error('Index not loaded')
+          }
+
+          const { idx, topK = 10, candidates = 300, requestId } = payload as {
+            idx: number
+            topK?: number
+            candidates?: number
+            requestId?: number
+          }
+
+          if (requestId !== undefined) currentRequestId = requestId
+
+          self.postMessage({ type: 'stage', payload: 'searching', requestId })
+
+          const bytesPerPaper = config.dimension / 8
+          const queryBinary = binaryIndex.slice(idx * bytesPerPaper, (idx + 1) * bytesPerPaper)
+          const numPapers = metadata.titles.length
+          const candidateResults: Array<{ idx: number; dist: number }> = []
+
+          for (let i = 0; i < numPapers; i++) {
+            if (i === idx) continue
+            const paperBinary = binaryIndex.subarray(i * bytesPerPaper, (i + 1) * bytesPerPaper)
+            candidateResults.push({ idx: i, dist: hammingDistance(queryBinary, paperBinary) })
+          }
+
+          candidateResults.sort((a, b) => a.dist - b.dist)
+          const topCandidates = candidateResults.slice(0, candidates)
+
+          const hammingResults = topCandidates.slice(0, topK).map((c, i) => ({
+            rank: i + 1,
+            idx: c.idx,
+            arxiv_id: metadata!.arxiv_ids[c.idx],
+            title: metadata!.titles[c.idx],
+            categories: metadata!.categories[c.idx],
+            score: 0,
+            hammingDist: c.dist,
+          }))
+          self.postMessage({ type: 'similar-hamming', payload: hammingResults, requestId })
+
+          if (rerankerReady) {
+            const titles = topCandidates.map((c) => metadata!.titles[c.idx])
+            const sourceTitle = metadata!.titles[idx]
+            const scores = await Reranker.rerank(sourceTitle, titles)
+
+            if (requestId !== undefined && requestId !== currentRequestId) break
+
+            const results = topCandidates.map((c, i) => ({
+              rank: 0,
+              idx: c.idx,
+              arxiv_id: metadata!.arxiv_ids[c.idx],
+              title: metadata!.titles[c.idx],
+              categories: metadata!.categories[c.idx],
+              score: scores[i],
+              hammingDist: c.dist,
+            }))
+            results.sort((a, b) => b.score - a.score)
+            for (let i = 0; i < results.length; i++) results[i].rank = i + 1
+            self.postMessage({ type: 'results', payload: results.slice(0, topK), requestId })
+          }
           break
         }
       }
