@@ -240,6 +240,7 @@ export function createSearchWorker(config: ModelConfig): void {
           self.postMessage({ type: 'substep', payload: 'downloading-model' })
           await Reranker.getInstance(progressCallback)
           self.postMessage({ type: 'substep', payload: 'initializing' })
+          rerankerReady = true
 
           self.postMessage({ type: 'models-loaded' })
           break

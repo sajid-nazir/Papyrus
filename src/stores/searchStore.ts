@@ -24,6 +24,7 @@ interface SearchState {
   availableCategories: CategorySummary[]
   similarQuery: string | null
   isReranking: boolean
+  savedResults: SearchResult[]
 
   // Actions
   setStage: (stage: Stage) => void
@@ -61,6 +62,7 @@ const initialState = {
   availableCategories: [],
   similarQuery: null,
   isReranking: false,
+  savedResults: [],
 }
 
 export const useSearchStore = create<SearchState>()(
@@ -156,6 +158,13 @@ export const useSearchStore = create<SearchState>()(
 
       setSimilarQuery: (title) =>
         set((state) => {
+          if (title !== null) {
+            state.savedResults = [...state.results]
+          } else {
+            state.results = state.savedResults
+            state.savedResults = []
+            state.isReranking = false
+          }
           state.similarQuery = title
         }),
 
