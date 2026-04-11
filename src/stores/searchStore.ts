@@ -14,6 +14,7 @@ interface SearchState {
   // Data state
   indexLoaded: boolean
   modelsLoaded: boolean
+  rerankerReady: boolean
   paperCount: number
 
   // Search state
@@ -35,6 +36,7 @@ interface SearchState {
   clearProgress: (file: string) => void
   setIndexLoaded: (count: number) => void
   setModelsLoaded: () => void
+  setRerankerReady: () => void
   setQuery: (query: string) => void
   setResults: (results: SearchResult[]) => void
   addToHistory: (query: string) => void
@@ -54,6 +56,7 @@ const initialState = {
   device: null,
   indexLoaded: false,
   modelsLoaded: false,
+  rerankerReady: false,
   paperCount: 0,
   query: '',
   results: [],
@@ -120,6 +123,11 @@ export const useSearchStore = create<SearchState>()(
         set((state) => {
           state.modelsLoaded = true
           state.stage = 'ready'
+        }),
+
+      setRerankerReady: () =>
+        set((state) => {
+          state.rerankerReady = true
         }),
 
       setQuery: (query) =>
