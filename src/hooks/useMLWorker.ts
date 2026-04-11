@@ -15,6 +15,7 @@ type WorkerMessageType =
   | 'index-loaded'
   | 'models-loaded'
   | 'results'
+  | 'similar-hamming'
   | 'categories-summary'
   | 'error'
 
@@ -59,6 +60,8 @@ export function useMLWorker() {
     setResults,
     addToHistory,
     setAvailableCategories,
+    setSimilarQuery,
+    setIsReranking,
   } = useSearchStore()
 
   useEffect(() => {
@@ -105,11 +108,19 @@ export function useMLWorker() {
           setAvailableCategories(payload as CategorySummary[])
           break
 
+        case 'similar-hamming': {
+          const msgRequestId = (event.data as { requestId?: number }).requestId
+          if (msgRequestId !== undefined && msgRequestId !== requestIdRef.current) break
+          setResults(payload as SearchResult[])
+          setIsReranking(true)
+          break
+        }
+
         case 'results': {
           const msgRequestId = (event.data as { requestId?: number }).requestId
           if (msgRequestId !== undefined && msgRequestId !== requestIdRef.current) break
-
           setResults(payload as SearchResult[])
+          setIsReranking(false)
           // Expose debug info for Playwright
           const debug = (event.data as { debug?: unknown }).debug
           if (debug) {
@@ -133,12 +144,11 @@ export function useMLWorker() {
     return () => {
       worker.terminate()
     }
-  }, [setStage, setSubstep, setDevice, setError, updateProgress, setIndexLoaded, setModelsLoaded, setResults, setAvailableCategories])
+  }, [setStage, setSubstep, setDevice, setError, updateProgress, setIndexLoaded, setModelsLoaded, setResults, setAvailableCategories, setSimilarQuery, setIsReranking])
 
   const search = useCallback(
     (query: string, topK = 10, candidates = 300) => {
       if (!workerRef.current || !readyRef.current) return
-
       requestIdRef.current += 1
       const { filters } = useSearchStore.getState()
       addToHistory(query)
@@ -151,5 +161,19 @@ export function useMLWorker() {
     [addToHistory, setStage]
   )
 
-  return { search }
+  const findSimilar = useCallback(
+    (idx: number, title: string) => {
+      if (!workerRef.current || !readyRef.current) return
+      requestIdRef.current += 1
+      setSimilarQuery(title)
+      setStage('searching')
+      workerRef.current.postMessage({
+        type: 'find-similar',
+        payload: { idx, topK: 10, candidates: 300, requestId: requestIdRef.current },
+      })
+    },
+    [setSimilarQuery, setStage]
+  )
+
+  return { search, findSimilar }
 }
