@@ -22,6 +22,8 @@ interface SearchState {
   searchHistory: string[]
   filters: FilterState
   availableCategories: CategorySummary[]
+  similarQuery: string | null
+  isReranking: boolean
 
   // Actions
   setStage: (stage: Stage) => void
@@ -38,6 +40,8 @@ interface SearchState {
   setFilters: (filters: FilterState) => void
   setAvailableCategories: (cats: CategorySummary[]) => void
   resetFilters: () => void
+  setSimilarQuery: (title: string | null) => void
+  setIsReranking: (v: boolean) => void
   reset: () => void
 }
 
@@ -55,6 +59,8 @@ const initialState = {
   searchHistory: [],
   filters: { categories: [], yearRange: null },
   availableCategories: [],
+  similarQuery: null,
+  isReranking: false,
 }
 
 export const useSearchStore = create<SearchState>()(
@@ -122,7 +128,8 @@ export const useSearchStore = create<SearchState>()(
       setResults: (results) =>
         set((state) => {
           state.results = results
-          state.stage = 'ready'
+          state.isReranking = false
+          if (state.stage === 'searching') state.stage = 'ready'
         }),
 
       addToHistory: (query) =>
@@ -145,6 +152,16 @@ export const useSearchStore = create<SearchState>()(
       resetFilters: () =>
         set((state) => {
           state.filters = { categories: [], yearRange: null }
+        }),
+
+      setSimilarQuery: (title) =>
+        set((state) => {
+          state.similarQuery = title
+        }),
+
+      setIsReranking: (v) =>
+        set((state) => {
+          state.isReranking = v
         }),
 
       reset: () => set(() => initialState),
