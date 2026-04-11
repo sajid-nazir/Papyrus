@@ -176,6 +176,7 @@ export function useMLWorker() {
       if (!workerRef.current || !readyRef.current) return
       requestIdRef.current += 1
       const { filters } = useSearchStore.getState()
+      useSearchStore.getState().setError(null)
       addToHistory(query)
       setStage('searching')
       const url = new URL(window.location.href)

@@ -19,6 +19,10 @@ export function Results({ onFindSimilar }: ResultsProps) {
     return <div className="results-container"><div className="loading-spinner" /></div>
   }
 
+  if (stage === 'ready' && results.length === 0 && resultQuery) {
+    return <div className="results-empty">No papers matched your filters.</div>
+  }
+
   if (results.length === 0) return null
 
   function catClass(categories: string) {

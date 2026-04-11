@@ -299,6 +299,11 @@ export function createSearchWorker(config: ModelConfig): void {
           candidateResults.sort((a, b) => a.dist - b.dist)
           const topCandidates = candidateResults.slice(0, candidates)
 
+          if (topCandidates.length === 0) {
+            self.postMessage({ type: 'results', payload: [], requestId })
+            break
+          }
+
           if (rerankerReady) {
             const titles = topCandidates.map((c) => metadata!.titles[c.idx])
             const scores = await Reranker.rerank(query, titles)
