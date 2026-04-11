@@ -21,6 +21,18 @@ export function Results({ onFindSimilar }: ResultsProps) {
 
   if (results.length === 0) return null
 
+  function catClass(categories: string) {
+    const primary = categories.split(' ')[0]
+    if (primary.startsWith('cs.')) return 'cat-cs'
+    if (primary.startsWith('math.')) return 'cat-math'
+    if (/^(physics|hep-|astro-|cond-mat|quant-|gr-|nucl-)/.test(primary)) return 'cat-physics'
+    if (primary.startsWith('stat.')) return 'cat-stat'
+    if (primary.startsWith('eess.')) return 'cat-eess'
+    if (primary.startsWith('q-bio.')) return 'cat-bio'
+    if (primary.startsWith('q-fin.')) return 'cat-fin'
+    return 'cat-other'
+  }
+
   return (
     <div className="results-container">
       <div className="results-header">
@@ -49,7 +61,7 @@ export function Results({ onFindSimilar }: ResultsProps) {
         </div>
       )}
       {results.map((result) => (
-        <div key={result.arxiv_id} className="result-card">
+        <div key={result.arxiv_id} className={`result-card ${catClass(result.categories)}`}>
           <div className="rank">{result.rank}</div>
           <div className="result-content">
             <a
