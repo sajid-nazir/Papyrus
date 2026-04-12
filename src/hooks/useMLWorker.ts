@@ -223,6 +223,7 @@ export function useMLWorker() {
       requestIdRef.current += 1
       const { filters } = useSearchStore.getState()
       useSearchStore.getState().setError(null)
+      useSearchStore.getState().clearSimilarHistory()
       addToHistory(query)
       setStage('searching')
       const url = new URL(window.location.href)

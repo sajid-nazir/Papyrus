@@ -160,8 +160,8 @@ header h1 {
 
 /* Results */
 .results-container { margin-top: 16px; }
-.results-header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
-.results-title { font-size: 1rem; font-weight: 600; margin: 0; }
+.results-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: nowrap; }
+.results-title { font-size: 1rem; font-weight: 600; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
 .results-meta { font-size: 0.8rem; color: var(--text-muted); }
 
 .result-card {

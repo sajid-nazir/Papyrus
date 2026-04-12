@@ -26,7 +26,7 @@ interface SearchState {
   availableCategories: CategorySummary[]
   similarQuery: string | null
   isReranking: boolean
-  savedResults: SearchResult[]
+  similarStack: Array<{ title: string | null; results: SearchResult[] }>
   paperDetails: Record<string, PaperDetail>
   detailsLoading: boolean
 
@@ -47,6 +47,8 @@ interface SearchState {
   setAvailableCategories: (cats: CategorySummary[]) => void
   resetFilters: () => void
   setSimilarQuery: (title: string | null) => void
+  goBack: () => void
+  clearSimilarHistory: () => void
   setIsReranking: (v: boolean) => void
   setPaperDetails: (details: Record<string, PaperDetail>) => void
   setDetailsLoading: (v: boolean) => void
@@ -71,7 +73,7 @@ const initialState = {
   availableCategories: [],
   similarQuery: null,
   isReranking: false,
-  savedResults: [],
+  similarStack: [],
   paperDetails: {},
   detailsLoading: false,
 }
@@ -148,6 +150,7 @@ export const useSearchStore = create<SearchState>()(
           state.results = results
           state.resultQuery = state.query
           state.isReranking = false
+          if (!state.similarQuery) state.similarStack = []
           if (state.stage === 'searching') state.stage = 'ready'
         }),
 
@@ -175,14 +178,25 @@ export const useSearchStore = create<SearchState>()(
 
       setSimilarQuery: (title) =>
         set((state) => {
-          if (title !== null) {
-            state.savedResults = [...state.results]
-          } else {
-            state.results = state.savedResults
-            state.savedResults = []
-            state.isReranking = false
-          }
+          // Push current state onto stack before navigating forward
+          state.similarStack.push({ title: state.similarQuery, results: [...state.results] })
           state.similarQuery = title
+        }),
+
+      goBack: () =>
+        set((state) => {
+          const prev = state.similarStack.pop()
+          if (prev) {
+            state.results = prev.results
+            state.similarQuery = prev.title
+          }
+          state.isReranking = false
+        }),
+
+      clearSimilarHistory: () =>
+        set((state) => {
+          state.similarStack = []
+          state.similarQuery = null
         }),
 
       setIsReranking: (v) =>

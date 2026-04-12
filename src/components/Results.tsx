@@ -7,7 +7,7 @@ interface ResultsProps {
 
 export function Results({ onFindSimilar }: ResultsProps) {
   const {
-    results, stage, resultQuery, similarQuery,
+    results, stage, resultQuery, similarQuery, similarStack,
     isReranking, rerankerReady, paperDetails, detailsLoading,
   } = useSearchStore()
   const [copied, setCopied] = useState(false)
@@ -65,13 +65,13 @@ export function Results({ onFindSimilar }: ResultsProps) {
   return (
     <div className="results-container">
       <div className="results-header">
+        {similarStack.length > 0 && similarQuery && (
+          <button className="back-btn" onClick={() => useSearchStore.getState().goBack()}>
+            ← Back
+          </button>
+        )}
         {similarQuery ? (
-          <>
-            <h2 className="results-title">Similar to: <em>{similarQuery}</em></h2>
-            <button className="back-btn" onClick={() => useSearchStore.getState().setSimilarQuery(null)}>
-              ← Back
-            </button>
-          </>
+          <h2 className="results-title">Similar to: <em>{similarQuery}</em></h2>
         ) : (
           <>
             <h2 className="results-title">Results</h2>
