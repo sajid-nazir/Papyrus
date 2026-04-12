@@ -234,8 +234,12 @@ header h1 {
   overflow: hidden;
 }
 
-.result-card:hover .abstract-text {
+.abstract-text.expanded {
   -webkit-line-clamp: unset;
+}
+
+.result-abstract {
+  cursor: pointer;
 }
 
 .published-date {

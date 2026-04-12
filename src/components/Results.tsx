@@ -12,6 +12,15 @@ export function Results({ onFindSimilar }: ResultsProps) {
   } = useSearchStore()
   const [copied, setCopied] = useState(false)
   const [copiedBibtex, setCopiedBibtex] = useState<string | null>(null)
+  const [expandedAbstracts, setExpandedAbstracts] = useState<Set<string>>(new Set())
+
+  function toggleAbstract(arxivId: string) {
+    setExpandedAbstracts(prev => {
+      const next = new Set(prev)
+      next.has(arxivId) ? next.delete(arxivId) : next.add(arxivId)
+      return next
+    })
+  }
 
   function copyLink() {
     navigator.clipboard.writeText(window.location.href)
@@ -102,12 +111,14 @@ export function Results({ onFindSimilar }: ResultsProps) {
               </div>
 
               {detail ? (
-                <div className="result-abstract">
+                <div className="result-abstract" onClick={() => toggleAbstract(result.arxiv_id)}>
                   <div className="result-authors">
                     {detail.authors.slice(0, 5).join(', ')}
                     {detail.authors.length > 5 && ' et al.'}
                   </div>
-                  <p className="abstract-text">{detail.abstract}</p>
+                  <p className={`abstract-text${expandedAbstracts.has(result.arxiv_id) ? ' expanded' : ''}`}>
+                    {detail.abstract}
+                  </p>
                   <span className="published-date">
                     {new Date(detail.published).toLocaleDateString('en-US', { year: 'numeric', month: 'short' })}
                   </span>
