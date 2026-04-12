@@ -6,24 +6,18 @@ interface ResultsProps {
 }
 
 export function Results({ onFindSimilar }: ResultsProps) {
-  const { results, stage, resultQuery, similarQuery, isReranking, rerankerReady } = useSearchStore()
+  const {
+    results, stage, resultQuery, similarQuery,
+    isReranking, rerankerReady, paperDetails, detailsLoading,
+  } = useSearchStore()
   const [copied, setCopied] = useState(false)
+  const [copiedBibtex, setCopiedBibtex] = useState<string | null>(null)
 
   function copyLink() {
     navigator.clipboard.writeText(window.location.href)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
-
-  if (stage === 'searching' && results.length === 0) {
-    return <div className="results-container"><div className="loading-spinner" /></div>
-  }
-
-  if (stage === 'ready' && results.length === 0 && resultQuery) {
-    return <div className="results-empty">No papers matched your filters.</div>
-  }
-
-  if (results.length === 0) return null
 
   function catClass(categories: string) {
     const primary = categories.split(' ')[0]
@@ -36,6 +30,28 @@ export function Results({ onFindSimilar }: ResultsProps) {
     if (primary.startsWith('q-fin.')) return 'cat-fin'
     return 'cat-other'
   }
+
+  function copyBibtex(arxivId: string, title: string) {
+    const detail = paperDetails[arxivId]
+    if (!detail) return
+    const firstAuthor = detail.authors[0]?.split(' ').pop() ?? 'unknown'
+    const year = new Date(detail.published).getFullYear()
+    const key = `${firstAuthor}${year}${arxivId.replace('.', '')}`
+    const bibtex = `@article{${key},\n  title={${title}},\n  author={${detail.authors.join(' and ')}},\n  journal={arXiv preprint arXiv:${arxivId}},\n  year={${year}}\n}`
+    navigator.clipboard.writeText(bibtex)
+    setCopiedBibtex(arxivId)
+    setTimeout(() => setCopiedBibtex(null), 2000)
+  }
+
+  if (stage === 'searching' && results.length === 0) {
+    return <div className="results-container"><div className="loading-spinner" /></div>
+  }
+
+  if (stage === 'ready' && results.length === 0 && resultQuery) {
+    return <div className="results-empty">No papers matched your filters.</div>
+  }
+
+  if (results.length === 0) return null
 
   return (
     <div className="results-container">
@@ -64,34 +80,62 @@ export function Results({ onFindSimilar }: ResultsProps) {
           Reranker loading — results sorted by embedding similarity only
         </div>
       )}
-      {results.map((result) => (
-        <div key={result.arxiv_id} className={`result-card ${catClass(result.categories)}`}>
-          <div className="rank">{result.rank}</div>
-          <div className="result-content">
-            <a
-              href={`https://arxiv.org/abs/${result.arxiv_id}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="title"
-            >
-              {result.title}
-            </a>
-            <div className="meta">
-              <span className="arxiv-id">{result.arxiv_id}</span>
-              <span className="categories">{result.categories}</span>
-              <span className="score">{result.score.toFixed(3)}</span>
-            </div>
-            <div className="result-actions">
-              <button
-                className="find-similar-btn"
-                onClick={() => onFindSimilar(result.idx, result.title)}
+
+      {results.map((result) => {
+        const detail = paperDetails[result.arxiv_id]
+        return (
+          <div key={result.arxiv_id} className={`result-card ${catClass(result.categories)}`}>
+            <div className="rank">{result.rank}</div>
+            <div className="result-content">
+              <a
+                href={`https://arxiv.org/abs/${result.arxiv_id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="title"
               >
-                Find Similar
-              </button>
+                {result.title}
+              </a>
+              <div className="meta">
+                <span className="arxiv-id">{result.arxiv_id}</span>
+                <span className="categories">{result.categories}</span>
+                <span className="score">{result.score.toFixed(3)}</span>
+              </div>
+
+              {detail ? (
+                <div className="result-abstract">
+                  <div className="result-authors">
+                    {detail.authors.slice(0, 5).join(', ')}
+                    {detail.authors.length > 5 && ' et al.'}
+                  </div>
+                  <p className="abstract-text">{detail.abstract}</p>
+                  <span className="published-date">
+                    {new Date(detail.published).toLocaleDateString('en-US', { year: 'numeric', month: 'short' })}
+                  </span>
+                </div>
+              ) : detailsLoading ? (
+                <div className="abstract-loading">Loading abstract…</div>
+              ) : null}
+
+              <div className="result-actions">
+                <button
+                  className="find-similar-btn"
+                  onClick={() => onFindSimilar(result.idx, result.title)}
+                >
+                  Find Similar
+                </button>
+                {detail && (
+                  <button
+                    className="bibtex-btn"
+                    onClick={() => copyBibtex(result.arxiv_id, result.title)}
+                  >
+                    {copiedBibtex === result.arxiv_id ? 'Copied!' : 'Copy BibTeX'}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

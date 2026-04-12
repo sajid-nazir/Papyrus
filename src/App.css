@@ -28,6 +28,28 @@ body {
   color: var(--text);
 }
 
+.memory-warning {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
+  background: #fffbe6;
+  border-bottom: 1px solid #ffe58f;
+  font-size: 0.8rem;
+  color: #614700;
+}
+
+.memory-warning button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #614700;
+  font-size: 1rem;
+  padding: 0;
+  flex-shrink: 0;
+}
+
 .app {
   max-width: 720px;
   margin: 0 auto;
@@ -187,6 +209,47 @@ header h1 {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* Abstracts */
+.result-abstract {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-light);
+}
+
+.result-authors {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.abstract-text {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 4px 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.result-card:hover .abstract-text {
+  -webkit-line-clamp: unset;
+}
+
+.published-date {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.abstract-loading {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-top: 4px;
+}
+
 .copy-link-btn {
   font-size: 0.75rem;
   padding: 2px 8px;
@@ -207,9 +270,10 @@ header h1 {
   margin-bottom: 10px;
 }
 
-.result-actions { margin-top: 6px; }
+.result-actions { margin-top: 6px; display: flex; gap: 8px; flex-wrap: wrap; }
 
-.find-similar-btn {
+.find-similar-btn,
+.bibtex-btn {
   font-size: 0.75rem;
   padding: 2px 8px;
   border: 1px solid var(--border);
@@ -219,7 +283,8 @@ header h1 {
   cursor: pointer;
 }
 
-.find-similar-btn:hover { border-color: var(--text-muted); }
+.find-similar-btn:hover,
+.bibtex-btn:hover { border-color: var(--text-muted); }
 
 .back-btn {
   font-size: 0.8rem;

@@ -7,6 +7,14 @@ import {
   type PreTrainedTokenizer,
   type PreTrainedModel,
 } from '@huggingface/transformers'
+import { getCached, setCache, clearCacheEntry } from './lib/indexeddb-cache'
+
+interface ChunkManifest {
+  version: string
+  totalSize: number
+  chunkSize: number
+  chunks: Array<{ name: string; size: number }>
+}
 
 env.allowLocalModels = false
 env.useBrowserCache = true
@@ -16,6 +24,7 @@ export type ProgressCallback = (data: { file: string; loaded: number; total: num
 
 const DEFAULT_BIN_SIZE_BYTES = 66_000_000
 const DEFAULT_METADATA_SIZE_BYTES = 180_000_000
+const CACHE_VERSION = 'v1'
 
 export interface ModelConfig {
   modelId: string
@@ -35,13 +44,12 @@ interface ProgressEvent {
 }
 
 class EmbedderPipeline {
-  private static instance: FeatureExtractionPipeline | null = null
+  static instance: FeatureExtractionPipeline | null = null
   static device: DeviceType = 'wasm'
   private static currentModelId: string | null = null
 
-  static async getInstance(config: ModelConfig, progressCallback: ProgressCallback): Promise<FeatureExtractionPipeline> {
-    if (!this.instance || this.currentModelId !== config.modelId) {
-      this.device = 'wasm'
+  static async getInstance(config: ModelConfig, progressCallback: ProgressCallback, forceReinit = false): Promise<FeatureExtractionPipeline> {
+    if (!this.instance || this.currentModelId !== config.modelId || forceReinit) {
       self.postMessage({ type: 'device', payload: this.device })
 
       const embedder = await pipeline('feature-extraction', config.modelId, {
@@ -67,15 +75,28 @@ class Reranker {
 
   static async getInstance(progressCallback: ProgressCallback): Promise<{ model: PreTrainedModel; tokenizer: PreTrainedTokenizer }> {
     if (!this.model || !this.tokenizer) {
-      this.model = await AutoModelForSequenceClassification.from_pretrained(this.MODEL_ID, {
-        dtype: 'q8',
-        device: EmbedderPipeline.device,
-        progress_callback: (p: ProgressEvent) => {
-          if (p.status === 'progress' && p.file) {
-            progressCallback({ file: p.file, loaded: p.loaded ?? 0, total: p.total ?? 0, progress: p.progress ?? 0 })
-          }
-        },
-      })
+      try {
+        this.model = await AutoModelForSequenceClassification.from_pretrained(this.MODEL_ID, {
+          dtype: 'q8',
+          device: EmbedderPipeline.device,
+          progress_callback: (p: ProgressEvent) => {
+            if (p.status === 'progress' && p.file) {
+              progressCallback({ file: p.file, loaded: p.loaded ?? 0, total: p.total ?? 0, progress: p.progress ?? 0 })
+            }
+          },
+        })
+      } catch {
+        // WebGPU may fail for reranker — fall back to wasm
+        this.model = await AutoModelForSequenceClassification.from_pretrained(this.MODEL_ID, {
+          dtype: 'q8',
+          device: 'wasm',
+          progress_callback: (p: ProgressEvent) => {
+            if (p.status === 'progress' && p.file) {
+              progressCallback({ file: p.file, loaded: p.loaded ?? 0, total: p.total ?? 0, progress: p.progress ?? 0 })
+            }
+          },
+        })
+      }
       this.tokenizer = await AutoTokenizer.from_pretrained(this.MODEL_ID)
     }
     return { model: this.model, tokenizer: this.tokenizer }
@@ -147,6 +168,16 @@ async function fetchWithProgress(
   defaultSize: number,
   progressCallback: ProgressCallback
 ): Promise<Uint8Array> {
+  // Try cache first
+  try {
+    const cached = await getCached(url, CACHE_VERSION)
+    if (cached) {
+      progressCallback({ file: fileName, loaded: cached.length, total: cached.length, progress: 100 })
+      self.postMessage({ type: 'cache-hit', payload: fileName })
+      return cached
+    }
+  } catch { /* cache miss or error, proceed with fetch */ }
+
   const response = await fetch(url)
   if (!response.ok) throw new Error(`Failed to load ${fileName}`)
 
@@ -168,6 +199,116 @@ async function fetchWithProgress(
   for (const chunk of chunks) {
     buffer.set(chunk, offset)
     offset += chunk.length
+  }
+
+  // Cache with quota awareness
+  try {
+    if (typeof navigator.storage?.estimate === 'function') {
+      const { quota = 0, usage = 0 } = await navigator.storage.estimate()
+      const remaining = quota - usage
+      if (buffer.byteLength > remaining * 0.9) {
+        console.warn(`[cache] Skipping ${fileName}: exceeds 90% of remaining quota`)
+        return buffer
+      }
+    }
+    await setCache(url, buffer, CACHE_VERSION)
+  } catch (e) {
+    console.warn(`[cache] Write failed for ${fileName}:`, e)
+    try { await clearCacheEntry(url) } catch { /* best-effort cleanup */ }
+  }
+
+  return buffer
+}
+
+async function fetchChunked(
+  basePath: string,
+  progressCallback: ProgressCallback
+): Promise<Uint8Array> {
+  // Try manifest first; fallback to single file
+  let manifest: ChunkManifest
+  try {
+    const res = await fetch(`${basePath}/chunk_manifest.json`)
+    if (!res.ok) throw new Error('No manifest')
+    manifest = await res.json() as ChunkManifest
+  } catch {
+    return fetchWithProgress(
+      `${basePath}/binary_embeddings.bin`,
+      'binary_embeddings.bin',
+      DEFAULT_BIN_SIZE_BYTES,
+      progressCallback
+    )
+  }
+
+  // Clean up old single-file cache entry (migration)
+  try { await clearCacheEntry(`${basePath}/binary_embeddings.bin`) } catch { /* best-effort */ }
+
+  const buffer = new Uint8Array(manifest.totalSize)
+  const chunkLoadedBytes = new Array(manifest.chunks.length).fill(0)
+  let completedBytes = 0
+  const concurrency = 4
+
+  function reportProgress() {
+    const inFlight = chunkLoadedBytes.reduce((s: number, b: number) => s + b, 0)
+    const total = Math.min(completedBytes + inFlight, manifest.totalSize)
+    progressCallback({
+      file: 'binary_embeddings',
+      loaded: total,
+      total: manifest.totalSize,
+      progress: (total / manifest.totalSize) * 100,
+    })
+  }
+
+  for (let i = 0; i < manifest.chunks.length; i += concurrency) {
+    const batch = manifest.chunks.slice(i, i + concurrency)
+    const settled = await Promise.allSettled(
+      batch.map(async (chunk, batchIdx) => {
+        const chunkIdx = i + batchIdx
+        const offset = chunkIdx * manifest.chunkSize
+        chunkLoadedBytes[chunkIdx] = 0
+        const data = await fetchWithProgress(
+          `${basePath}/${chunk.name}`,
+          chunk.name,
+          chunk.size,
+          (p) => { chunkLoadedBytes[chunkIdx] = p.loaded; reportProgress() }
+        )
+        return { data, offset, chunkIdx }
+      })
+    )
+
+    for (const result of settled) {
+      if (result.status === 'fulfilled') {
+        const { data, offset, chunkIdx } = result.value
+        buffer.set(data, offset)
+        chunkLoadedBytes[chunkIdx] = 0
+        completedBytes += data.length
+      }
+    }
+
+    // Retry failed chunks (max 2 attempts)
+    const failed = settled
+      .map((r, idx) => r.status === 'rejected' ? { chunk: batch[idx], chunkIdx: i + idx } : null)
+      .filter((x): x is { chunk: { name: string; size: number }; chunkIdx: number } => x !== null)
+
+    for (const { chunk, chunkIdx } of failed) {
+      const offset = chunkIdx * manifest.chunkSize
+      let retryData: Uint8Array | null = null
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          await new Promise(r => setTimeout(r, attempt * 1000))
+          retryData = await fetchWithProgress(
+            `${basePath}/${chunk.name}`,
+            chunk.name,
+            chunk.size,
+            (p) => { chunkLoadedBytes[chunkIdx] = p.loaded; reportProgress() }
+          )
+          break
+        } catch { /* retry */ }
+      }
+      if (!retryData) throw new Error(`Failed to fetch chunk ${chunk.name} after retries`)
+      buffer.set(retryData, offset)
+      chunkLoadedBytes[chunkIdx] = 0
+      completedBytes += retryData.length
+    }
   }
 
   return buffer
@@ -192,12 +333,7 @@ export function createSearchWorker(config: ModelConfig): void {
           self.postMessage({ type: 'stage', payload: 'loading-index' })
 
           self.postMessage({ type: 'substep', payload: 'downloading-embeddings' })
-          binaryIndex = await fetchWithProgress(
-            `${config.dataPath}/binary_embeddings.bin`,
-            'binary_embeddings.bin',
-            config.defaultBinSize ?? DEFAULT_BIN_SIZE_BYTES,
-            progressCallback
-          )
+          binaryIndex = await fetchChunked(config.dataPath, progressCallback)
 
           self.postMessage({ type: 'substep', payload: 'downloading-metadata' })
           const metaBuffer = await fetchWithProgress(
@@ -231,6 +367,9 @@ export function createSearchWorker(config: ModelConfig): void {
         }
 
         case 'load-models': {
+          const { device } = (payload ?? {}) as { device?: 'webgpu' | 'wasm' }
+          EmbedderPipeline.device = device ?? 'wasm'
+
           // Phase 1: embedder — search becomes available immediately
           self.postMessage({ type: 'stage', payload: 'loading-embedder' })
           self.postMessage({ type: 'substep', payload: 'downloading-model' })
@@ -267,7 +406,22 @@ export function createSearchWorker(config: ModelConfig): void {
 
           const embedder = await EmbedderPipeline.getInstance(config, progressCallback)
           const promptedQuery = config.queryPrefix ? `${config.queryPrefix}${query}` : query
-          const embedding = await embedder(promptedQuery, { pooling: config.pooling, normalize: true })
+
+          let embedding
+          try {
+            embedding = await embedder(promptedQuery, { pooling: config.pooling, normalize: true })
+          } catch (e) {
+            if (EmbedderPipeline.device === 'webgpu') {
+              console.warn('[worker] GPU inference failed, falling back to WASM:', e)
+              EmbedderPipeline.device = 'wasm'
+              EmbedderPipeline.instance = null
+              const wasmEmbedder = await EmbedderPipeline.getInstance(config, progressCallback, true)
+              embedding = await wasmEmbedder(promptedQuery, { pooling: config.pooling, normalize: true })
+              self.postMessage({ type: 'device', payload: 'wasm' })
+            } else {
+              throw e
+            }
+          }
 
           if (requestId !== undefined && requestId !== currentRequestId) break
 

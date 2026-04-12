@@ -68,3 +68,9 @@ export interface CategorySummary {
   category: string
   count: number
 }
+
+export interface PaperDetail {
+  abstract: string
+  authors: string[]
+  published: string
+}

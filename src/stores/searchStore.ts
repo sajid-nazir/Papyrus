@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { immer } from 'zustand/middleware/immer'
-import type { Stage, Substep, LoadingProgress, SearchResult, DeviceType, FilterState, CategorySummary } from '../types'
+import type { Stage, Substep, LoadingProgress, SearchResult, DeviceType, FilterState, CategorySummary, PaperDetail } from '../types'
 
 interface SearchState {
   // Loading state
@@ -27,6 +27,8 @@ interface SearchState {
   similarQuery: string | null
   isReranking: boolean
   savedResults: SearchResult[]
+  paperDetails: Record<string, PaperDetail>
+  detailsLoading: boolean
 
   // Actions
   setStage: (stage: Stage) => void
@@ -46,6 +48,8 @@ interface SearchState {
   resetFilters: () => void
   setSimilarQuery: (title: string | null) => void
   setIsReranking: (v: boolean) => void
+  setPaperDetails: (details: Record<string, PaperDetail>) => void
+  setDetailsLoading: (v: boolean) => void
   reset: () => void
 }
 
@@ -68,6 +72,8 @@ const initialState = {
   similarQuery: null,
   isReranking: false,
   savedResults: [],
+  paperDetails: {},
+  detailsLoading: false,
 }
 
 export const useSearchStore = create<SearchState>()(
@@ -182,6 +188,16 @@ export const useSearchStore = create<SearchState>()(
       setIsReranking: (v) =>
         set((state) => {
           state.isReranking = v
+        }),
+
+      setPaperDetails: (details) =>
+        set((state) => {
+          Object.assign(state.paperDetails, details)
+        }),
+
+      setDetailsLoading: (v) =>
+        set((state) => {
+          state.detailsLoading = v
         }),
 
       reset: () => set(() => initialState),

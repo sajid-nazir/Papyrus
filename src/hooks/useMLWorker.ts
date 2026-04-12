@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { useSearchStore } from '../stores/searchStore'
-import type { LoadingProgress, SearchResult, DeviceType, Stage, Substep, CategorySummary } from '../types'
+import type { LoadingProgress, SearchResult, DeviceType, Stage, Substep, CategorySummary, PaperDetail } from '../types'
+import { fetchArxivDetails } from '../lib/arxiv-api'
 
 import MxbaiWorker from '../worker?worker'
 import NomicWorker from '../worker-nomic?worker'
@@ -12,6 +13,7 @@ type WorkerMessageType =
   | 'stage'
   | 'substep'
   | 'progress'
+  | 'cache-hit'
   | 'index-loaded'
   | 'models-loaded'
   | 'reranker-progress'
@@ -50,6 +52,7 @@ export function useMLWorker() {
   const workerRef = useRef<Worker | null>(null)
   const readyRef = useRef(false)
   const requestIdRef = useRef(0)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   const {
     setStage,
@@ -65,6 +68,8 @@ export function useMLWorker() {
     setSimilarQuery,
     setIsReranking,
     setRerankerReady,
+    setPaperDetails,
+    setDetailsLoading,
   } = useSearchStore()
 
   useEffect(() => {
@@ -96,10 +101,28 @@ export function useMLWorker() {
           updateProgress(payload as LoadingProgress)
           break
 
+        case 'cache-hit':
+          console.log(`[cache] Hit: ${payload}`)
+          break
+
         case 'index-loaded': {
           const { count } = payload as { count: number }
           setIndexLoaded(count)
-          worker.postMessage({ type: 'load-models' })
+
+          // Detect WebGPU on main thread with timeout, then load models
+          void (async () => {
+            let preferredDevice: 'webgpu' | 'wasm' = 'wasm'
+            if ('gpu' in navigator) {
+              try {
+                const adapter = await Promise.race([
+                  (navigator as unknown as { gpu: { requestAdapter: () => Promise<unknown> } }).gpu.requestAdapter(),
+                  new Promise(resolve => setTimeout(() => resolve(null), 3000)),
+                ])
+                if (adapter) preferredDevice = 'webgpu'
+              } catch { /* fall through to wasm */ }
+            }
+            worker.postMessage({ type: 'load-models', payload: { device: preferredDevice } })
+          })()
           break
         }
 
@@ -144,8 +167,31 @@ export function useMLWorker() {
         case 'results': {
           const msgRequestId = (event.data as { requestId?: number }).requestId
           if (msgRequestId !== undefined && msgRequestId !== requestIdRef.current) break
-          setResults(payload as SearchResult[])
+          const results = payload as SearchResult[]
+          setResults(results)
           setIsReranking(false)
+
+          // Cancel any in-flight abstract fetch
+          abortControllerRef.current?.abort()
+          const controller = new AbortController()
+          abortControllerRef.current = controller
+
+          const ids = results.slice(0, 10).map(r => r.arxiv_id)
+          if (ids.length > 0) {
+            setDetailsLoading(true)
+            fetchArxivDetails(ids, controller.signal).then(detailsMap => {
+              if (controller.signal.aborted) return
+              const details: Record<string, PaperDetail> = {}
+              detailsMap.forEach((v, k) => {
+                details[k] = { abstract: v.abstract, authors: v.authors, published: v.published }
+              })
+              setPaperDetails(details)
+              setDetailsLoading(false)
+            }).catch((e) => {
+              if ((e as Error).name !== 'AbortError') setDetailsLoading(false)
+            })
+          }
+
           // Expose debug info for Playwright
           const debug = (event.data as { debug?: unknown }).debug
           if (debug) {
@@ -169,7 +215,7 @@ export function useMLWorker() {
     return () => {
       worker.terminate()
     }
-  }, [setStage, setSubstep, setDevice, setError, updateProgress, setIndexLoaded, setModelsLoaded, setResults, setAvailableCategories, setIsReranking, setRerankerReady])
+  }, [setStage, setSubstep, setDevice, setError, updateProgress, setIndexLoaded, setModelsLoaded, setResults, setAvailableCategories, setIsReranking, setRerankerReady, setPaperDetails, setDetailsLoading])
 
   const search = useCallback(
     (query: string, topK = 10, candidates = 300) => {
