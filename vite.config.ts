@@ -22,15 +22,6 @@ export default defineConfig({
             },
           },
           {
-            urlPattern: /huggingface\.co/,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'hf-models',
-              expiration: { maxEntries: 30, maxAgeSeconds: 30 * 24 * 60 * 60 },
-              cacheableResponse: { statuses: [200] },
-            },
-          },
-          {
             urlPattern: /\.wasm$/,
             handler: 'CacheFirst',
             options: {
