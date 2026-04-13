@@ -60,6 +60,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/arxiv-proxy/, '/api'),
       },
+      '/hf-proxy': {
+        target: 'https://huggingface.co',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/hf-proxy/, ''),
+      },
     },
   },
   worker: {

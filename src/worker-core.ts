@@ -19,6 +19,11 @@ interface ChunkManifest {
 env.allowLocalModels = false
 env.useBrowserCache = true
 
+// Proxy HuggingFace through our own domain to avoid CORS issues in production
+if (!self.location.origin.includes('localhost')) {
+  env.remoteHost = `${self.location.origin}/hf-proxy`
+}
+
 export type DeviceType = 'webgpu' | 'wasm' | 'cpu'
 export type ProgressCallback = (data: { file: string; loaded: number; total: number; progress: number }) => void
 
