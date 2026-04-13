@@ -1,5 +1,7 @@
 # Papyrus
 
+**[papyrus.sajid-e36.workers.dev](https://papyrus.sajid-e36.workers.dev)**
+
 In-browser academic paper search engine with semantic search, knowledge graph visualization, and multi-source support (arXiv, OpenAlex, Europe PMC).
 
 ## What's working
