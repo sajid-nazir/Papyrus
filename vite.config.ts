@@ -1,12 +1,22 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import fs from 'node:fs'
 
 const R2_DATA_URL = process.env.VITE_R2_DATA_URL || ''
+
+const removeWranglerJson = {
+  name: 'remove-wrangler-json',
+  closeBundle() {
+    const p = 'dist/wrangler.json'
+    if (fs.existsSync(p)) fs.unlinkSync(p)
+  },
+}
 
 export default defineConfig({
   plugins: [
     react(),
+    removeWranglerJson,
     VitePWA({      registerType: 'autoUpdate',
       workbox: {
         globPatterns: ['**/*.{js,css,html,woff2}'],
