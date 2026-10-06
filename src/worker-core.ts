@@ -7,7 +7,7 @@ import {
   type PreTrainedTokenizer,
   type PreTrainedModel,
 } from '@huggingface/transformers'
-import { getCached, setCache, clearCacheEntry } from './lib/indexeddb-cache'
+import { getCached, setCache, clearCacheEntry, clearCacheExceptPrefix } from './lib/indexeddb-cache'
 
 interface ChunkManifest {
   version: string
@@ -78,29 +78,25 @@ class Reranker {
   private static tokenizer: PreTrainedTokenizer | null = null
   private static readonly MODEL_ID = 'Xenova/ms-marco-MiniLM-L-6-v2'
 
+  private static loadModel(device: DeviceType, progressCallback: ProgressCallback): Promise<PreTrainedModel> {
+    return AutoModelForSequenceClassification.from_pretrained(this.MODEL_ID, {
+      dtype: 'q8',
+      device,
+      progress_callback: (p: ProgressEvent) => {
+        if (p.status === 'progress' && p.file) {
+          progressCallback({ file: p.file, loaded: p.loaded ?? 0, total: p.total ?? 0, progress: p.progress ?? 0 })
+        }
+      },
+    })
+  }
+
   static async getInstance(progressCallback: ProgressCallback): Promise<{ model: PreTrainedModel; tokenizer: PreTrainedTokenizer }> {
     if (!this.model || !this.tokenizer) {
       try {
-        this.model = await AutoModelForSequenceClassification.from_pretrained(this.MODEL_ID, {
-          dtype: 'q8',
-          device: EmbedderPipeline.device,
-          progress_callback: (p: ProgressEvent) => {
-            if (p.status === 'progress' && p.file) {
-              progressCallback({ file: p.file, loaded: p.loaded ?? 0, total: p.total ?? 0, progress: p.progress ?? 0 })
-            }
-          },
-        })
+        this.model = await this.loadModel(EmbedderPipeline.device, progressCallback)
       } catch {
         // WebGPU may fail for reranker — fall back to wasm
-        this.model = await AutoModelForSequenceClassification.from_pretrained(this.MODEL_ID, {
-          dtype: 'q8',
-          device: 'wasm',
-          progress_callback: (p: ProgressEvent) => {
-            if (p.status === 'progress' && p.file) {
-              progressCallback({ file: p.file, loaded: p.loaded ?? 0, total: p.total ?? 0, progress: p.progress ?? 0 })
-            }
-          },
-        })
+        this.model = await this.loadModel('wasm', progressCallback)
       }
       this.tokenizer = await AutoTokenizer.from_pretrained(this.MODEL_ID)
     }
@@ -229,6 +225,12 @@ async function fetchChunked(
   basePath: string,
   progressCallback: ProgressCallback
 ): Promise<Uint8Array> {
+  // Evict any other model's cached data files before pulling this one in —
+  // each model's dataset lives under its own basePath but shares one
+  // IndexedDB store, so without this, switching models (via ?model=) never
+  // reclaims the previous model's hundreds of MB.
+  try { await clearCacheExceptPrefix(basePath) } catch { /* best-effort */ }
+
   // Try manifest first; fallback to single file
   let manifest: ChunkManifest
   try {
@@ -297,7 +299,8 @@ async function fetchChunked(
     for (const { chunk, chunkIdx } of failed) {
       const offset = chunkIdx * manifest.chunkSize
       let retryData: Uint8Array | null = null
-      for (let attempt = 1; attempt <= 2; attempt++) {
+      const maxAttempts = 3
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
           await new Promise(r => setTimeout(r, attempt * 1000))
           retryData = await fetchWithProgress(
@@ -309,7 +312,14 @@ async function fetchChunked(
           break
         } catch { /* retry */ }
       }
-      if (!retryData) throw new Error(`Failed to fetch chunk ${chunk.name} after retries`)
+      if (!retryData) {
+        // Chunks fetched so far (this one and earlier successes) are already
+        // cached in IndexedDB, so reloading the page will resume from here
+        // rather than re-downloading everything.
+        throw new Error(
+          `Failed to fetch chunk ${chunk.name} (${chunkIdx + 1}/${manifest.chunks.length}) after ${maxAttempts} attempts — reload to resume from cache`
+        )
+      }
       buffer.set(retryData, offset)
       chunkLoadedBytes[chunkIdx] = 0
       completedBytes += retryData.length

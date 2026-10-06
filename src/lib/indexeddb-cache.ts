@@ -58,29 +58,28 @@ export async function clearCacheEntry(key: string): Promise<void> {
   })
 }
 
-export async function clearCache(): Promise<void> {
+// Deletes every cached entry whose key does NOT start with `keepPrefix`.
+// Used to evict a previous model's cached data files when a different
+// model is loaded, since each model's dataset lives under its own path
+// prefix but all share this one IndexedDB store — without this, switching
+// between the 512d/nomic/minilm models accumulates every model's data
+// (hundreds of MB each) with nothing ever reclaiming it.
+export async function clearCacheExceptPrefix(keepPrefix: string): Promise<void> {
   const db = await openDB()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite')
-    const req = tx.objectStore(STORE_NAME).clear()
-    req.onsuccess = () => resolve()
-    req.onerror = () => reject(req.error)
-  })
-}
-
-export async function getCacheSize(): Promise<number> {
-  const db = await openDB()
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readonly')
-    const req = tx.objectStore(STORE_NAME).openCursor()
-    let total = 0
+    const store = tx.objectStore(STORE_NAME)
+    const req = store.openCursor()
     req.onsuccess = () => {
       const cursor = req.result
       if (cursor) {
-        total += (cursor.value as CacheEntry).data.byteLength
+        const entry = cursor.value as CacheEntry
+        if (!entry.key.startsWith(keepPrefix)) {
+          cursor.delete()
+        }
         cursor.continue()
       } else {
-        resolve(total)
+        resolve()
       }
     }
     req.onerror = () => reject(req.error)
