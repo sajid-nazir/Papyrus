@@ -213,6 +213,7 @@ export function useMLWorker() {
     workerRef.current = worker
 
     return () => {
+      abortControllerRef.current?.abort()
       worker.terminate()
     }
   }, [setStage, setSubstep, setDevice, setError, updateProgress, setIndexLoaded, setModelsLoaded, setResults, addToHistory, setAvailableCategories, setIsReranking, setRerankerReady, setPaperDetails, setDetailsLoading])
