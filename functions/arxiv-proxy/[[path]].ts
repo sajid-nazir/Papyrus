@@ -1,4 +1,8 @@
 export async function onRequest(context: { request: Request }): Promise<Response> {
+  if (context.request.method !== 'GET') {
+    return new Response('Method Not Allowed', { status: 405, headers: { Allow: 'GET' } })
+  }
+
   const url = new URL(context.request.url)
   const target = `https://export.arxiv.org/api${url.pathname.replace('/arxiv-proxy', '')}${url.search}`
 
@@ -12,8 +16,10 @@ export async function onRequest(context: { request: Request }): Promise<Response
     status: response.status,
     headers: {
       'Content-Type': response.headers.get('Content-Type') ?? 'application/xml',
-      'Access-Control-Allow-Origin': '*',
-      'Cache-Control': 'public, max-age=3600',
+      // Same-origin only: the frontend calls this via a relative path, so no
+      // cross-origin CORS grant is needed, and a wildcard would let any
+      // third-party site use this Function (and arXiv's rate limit) for free.
+      ...(response.ok ? { 'Cache-Control': 'public, max-age=3600' } : {}),
     },
   })
 }
