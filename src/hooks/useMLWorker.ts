@@ -215,7 +215,7 @@ export function useMLWorker() {
     return () => {
       worker.terminate()
     }
-  }, [setStage, setSubstep, setDevice, setError, updateProgress, setIndexLoaded, setModelsLoaded, setResults, setAvailableCategories, setIsReranking, setRerankerReady, setPaperDetails, setDetailsLoading])
+  }, [setStage, setSubstep, setDevice, setError, updateProgress, setIndexLoaded, setModelsLoaded, setResults, addToHistory, setAvailableCategories, setIsReranking, setRerankerReady, setPaperDetails, setDetailsLoading])
 
   const search = useCallback(
     (query: string, topK = 10, candidates = 300) => {

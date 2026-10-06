@@ -17,7 +17,11 @@ export function Results({ onFindSimilar }: ResultsProps) {
   function toggleAbstract(arxivId: string) {
     setExpandedAbstracts(prev => {
       const next = new Set(prev)
-      next.has(arxivId) ? next.delete(arxivId) : next.add(arxivId)
+      if (next.has(arxivId)) {
+        next.delete(arxivId)
+      } else {
+        next.add(arxivId)
+      }
       return next
     })
   }
