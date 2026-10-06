@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useMLWorker } from './hooks/useMLWorker'
 import { SearchBox } from './components/SearchBox'
 import { Filters } from './components/Filters'
@@ -8,12 +8,10 @@ import './App.css'
 
 function App() {
   const { search, findSimilar } = useMLWorker()
-  const [lowMemory, setLowMemory] = useState(false)
-
-  useEffect(() => {
+  const [lowMemory, setLowMemory] = useState(() => {
     const mem = (navigator as unknown as { deviceMemory?: number }).deviceMemory
-    if (mem !== undefined && mem <= 2) setLowMemory(true)
-  }, [])
+    return mem !== undefined && mem <= 2
+  })
 
   return (
     <div className="app">
