@@ -149,6 +149,23 @@ interface Metadata {
   categories: string[]
 }
 
+function passesFilters(
+  metadata: Metadata,
+  i: number,
+  filters?: { categories: string[]; yearRange: [number, number] | null }
+): boolean {
+  if (!filters) return true
+  if (filters.categories.length > 0) {
+    const paperCats = metadata.categories[i].split(' ')
+    if (!filters.categories.some(fc => paperCats.includes(fc))) return false
+  }
+  if (filters.yearRange) {
+    const year = yearFromArxivId(metadata.arxiv_ids[i])
+    if (year < filters.yearRange[0] || year > filters.yearRange[1]) return false
+  }
+  return true
+}
+
 function yearFromArxivId(id: string): number {
   const match = id.match(/^(\d{2})(\d{2})\./)
   if (match) {
@@ -449,17 +466,7 @@ export function createSearchWorker(config: ModelConfig): void {
           const candidateResults: Array<{ idx: number; dist: number }> = []
 
           for (let i = 0; i < numPapers; i++) {
-            // Apply filters
-            if (filters) {
-              if (filters.categories.length > 0) {
-                const paperCats = metadata.categories[i].split(' ')
-                if (!filters.categories.some(fc => paperCats.includes(fc))) continue
-              }
-              if (filters.yearRange) {
-                const year = yearFromArxivId(metadata.arxiv_ids[i])
-                if (year < filters.yearRange[0] || year > filters.yearRange[1]) continue
-              }
-            }
+            if (!passesFilters(metadata, i, filters)) continue
             const paperBinary = binaryIndex.subarray(i * bytesPerPaper, (i + 1) * bytesPerPaper)
             const dist = hammingDistance(binaryQuery, paperBinary)
             candidateResults.push({ idx: i, dist })
@@ -567,6 +574,94 @@ export function createSearchWorker(config: ModelConfig): void {
             for (let i = 0; i < results.length; i++) results[i].rank = i + 1
             self.postMessage({ type: 'results', payload: results.slice(0, topK), requestId })
           }
+          break
+        }
+
+        case 'build-graph': {
+          if (!binaryIndex || !metadata) {
+            throw new Error('Index not loaded')
+          }
+
+          const { seedIdxs, requestId, filters } = payload as {
+            seedIdxs: number[]
+            requestId?: number
+            filters?: { categories: string[]; yearRange: [number, number] | null }
+          }
+
+          if (requestId !== undefined) currentRequestId = requestId
+
+          const bytesPerPaper = config.dimension / 8
+          const numPapers = metadata.titles.length
+          const neighborsPerSeed = 4
+          const maxNodes = 50
+
+          const nodeIdxs = new Set(seedIdxs)
+
+          for (const seedIdx of seedIdxs) {
+            if (nodeIdxs.size >= maxNodes) break
+            const seedBinary = binaryIndex.subarray(seedIdx * bytesPerPaper, (seedIdx + 1) * bytesPerPaper)
+            const candidates: Array<{ idx: number; dist: number }> = []
+            for (let i = 0; i < numPapers; i++) {
+              if (i === seedIdx || nodeIdxs.has(i)) continue
+              if (!passesFilters(metadata, i, filters)) continue
+              const paperBinary = binaryIndex.subarray(i * bytesPerPaper, (i + 1) * bytesPerPaper)
+              candidates.push({ idx: i, dist: hammingDistance(seedBinary, paperBinary) })
+            }
+            candidates.sort((a, b) => a.dist - b.dist)
+            for (const c of candidates.slice(0, neighborsPerSeed)) {
+              nodeIdxs.add(c.idx)
+              if (nodeIdxs.size >= maxNodes) break
+            }
+          }
+
+          if (requestId !== undefined && requestId !== currentRequestId) break
+
+          const nodes = Array.from(nodeIdxs)
+          const dim = config.dimension
+
+          // Pairwise distances within the node set (small — n <= maxNodes).
+          const distances = new Map<string, number>()
+          const pairKey = (a: number, b: number) => a < b ? `${a}:${b}` : `${b}:${a}`
+          for (let a = 0; a < nodes.length; a++) {
+            const binA = binaryIndex.subarray(nodes[a] * bytesPerPaper, (nodes[a] + 1) * bytesPerPaper)
+            for (let b = a + 1; b < nodes.length; b++) {
+              const binB = binaryIndex.subarray(nodes[b] * bytesPerPaper, (nodes[b] + 1) * bytesPerPaper)
+              distances.set(pairKey(nodes[a], nodes[b]), hammingDistance(binA, binB))
+            }
+          }
+
+          // Each node connects to its 3 nearest other nodes in the set.
+          const edgeKeys = new Set<string>()
+          const edges: Array<{ source: number; target: number; weight: number }> = []
+          for (const nodeIdx of nodes) {
+            const neighborDists = nodes
+              .filter(other => other !== nodeIdx)
+              .map(other => ({ other, dist: distances.get(pairKey(nodeIdx, other))! }))
+              .sort((a, b) => a.dist - b.dist)
+              .slice(0, 3)
+            for (const { other, dist } of neighborDists) {
+              const key = pairKey(nodeIdx, other)
+              if (edgeKeys.has(key)) continue
+              edgeKeys.add(key)
+              edges.push({ source: nodeIdx, target: other, weight: 1 - dist / dim })
+            }
+          }
+
+          const seedSet = new Set(seedIdxs)
+          self.postMessage({
+            type: 'graph',
+            payload: {
+              nodes: nodes.map(idx => ({
+                idx,
+                arxiv_id: metadata!.arxiv_ids[idx],
+                title: metadata!.titles[idx],
+                categories: metadata!.categories[idx],
+                isSeed: seedSet.has(idx),
+              })),
+              edges,
+            },
+            requestId,
+          })
           break
         }
       }

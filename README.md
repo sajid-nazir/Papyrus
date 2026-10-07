@@ -15,11 +15,12 @@ In-browser academic paper search engine with semantic search, knowledge graph vi
 - Offline support via IndexedDB caching and service worker
 - WebGPU acceleration with automatic WASM fallback
 - Dark mode
+- Similarity graph of search results (Sigma.js) — embedding-distance map, not citations
 
 ## What's coming
 
-- Knowledge graph visualization (Sigma.js)
 - Multi-source search (OpenAlex, Europe PMC)
+- Citation-graph edges, once a citation data source is wired up
 
 ## Stack
 

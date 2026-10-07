@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { useSearchStore } from '../stores/searchStore'
-import type { LoadingProgress, SearchResult, DeviceType, Stage, Substep, CategorySummary, PaperDetail } from '../types'
+import type { LoadingProgress, SearchResult, DeviceType, Stage, Substep, CategorySummary, PaperDetail, GraphData } from '../types'
 import { fetchArxivDetails } from '../lib/arxiv-api'
 
 import MxbaiWorker from '../worker?worker'
@@ -21,6 +21,7 @@ type WorkerMessageType =
   | 'results'
   | 'similar-hamming'
   | 'categories-summary'
+  | 'graph'
   | 'error'
 
 interface WorkerMessage {
@@ -70,6 +71,7 @@ export function useMLWorker() {
     setRerankerReady,
     setPaperDetails,
     setDetailsLoading,
+    setGraph,
   } = useSearchStore()
 
   useEffect(() => {
@@ -156,6 +158,13 @@ export function useMLWorker() {
           setAvailableCategories(payload as CategorySummary[])
           break
 
+        case 'graph': {
+          const msgRequestId = (event.data as { requestId?: number }).requestId
+          if (msgRequestId !== undefined && msgRequestId !== requestIdRef.current) break
+          setGraph(payload as GraphData)
+          break
+        }
+
         case 'similar-hamming': {
           const msgRequestId = (event.data as { requestId?: number }).requestId
           if (msgRequestId !== undefined && msgRequestId !== requestIdRef.current) break
@@ -216,7 +225,7 @@ export function useMLWorker() {
       abortControllerRef.current?.abort()
       worker.terminate()
     }
-  }, [setStage, setSubstep, setDevice, setError, updateProgress, setIndexLoaded, setModelsLoaded, setResults, addToHistory, setAvailableCategories, setIsReranking, setRerankerReady, setPaperDetails, setDetailsLoading])
+  }, [setStage, setSubstep, setDevice, setError, updateProgress, setIndexLoaded, setModelsLoaded, setResults, addToHistory, setAvailableCategories, setIsReranking, setRerankerReady, setPaperDetails, setDetailsLoading, setGraph])
 
   const search = useCallback(
     (query: string, topK = 10, candidates = 300) => {
@@ -253,5 +262,18 @@ export function useMLWorker() {
     [setSimilarQuery, setStage]
   )
 
-  return { search, findSimilar }
+  const buildGraph = useCallback(
+    (seedIdxs: number[]) => {
+      if (!workerRef.current || !readyRef.current) return
+      requestIdRef.current += 1
+      const { filters } = useSearchStore.getState()
+      workerRef.current.postMessage({
+        type: 'build-graph',
+        payload: { seedIdxs, filters, requestId: requestIdRef.current },
+      })
+    },
+    []
+  )
+
+  return { search, findSimilar, buildGraph }
 }

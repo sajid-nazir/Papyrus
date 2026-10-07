@@ -7,7 +7,7 @@ import { Results } from './components/Results'
 import './App.css'
 
 function App() {
-  const { search, findSimilar } = useMLWorker()
+  const { search, findSimilar, buildGraph } = useMLWorker()
   const [lowMemory, setLowMemory] = useState(() => {
     const mem = (navigator as unknown as { deviceMemory?: number }).deviceMemory
     return mem !== undefined && mem <= 2
@@ -28,7 +28,7 @@ function App() {
         <SearchBox onSearch={search} />
         <Filters />
         <Progress />
-        <Results onFindSimilar={findSimilar} />
+        <Results onFindSimilar={findSimilar} onBuildGraph={buildGraph} />
       </main>
     </div>
   )
