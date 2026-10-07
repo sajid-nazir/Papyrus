@@ -350,6 +350,11 @@ export function createSearchWorker(config: ModelConfig): void {
   let binaryIndex: Uint8Array | null = null
   let metadata: Metadata | null = null
   let currentRequestId = 0
+  // Separate from currentRequestId: build-graph must not overwrite the id
+  // search/find-similar stale-check against, since the graph can be
+  // requested while one of those is still awaiting (e.g. embedder
+  // inference or reranking) — see the matching comment in useMLWorker.ts.
+  let currentGraphRequestId = 0
   let rerankerReady = false
 
   const progressCallback: ProgressCallback = (data) => {
@@ -578,90 +583,113 @@ export function createSearchWorker(config: ModelConfig): void {
         }
 
         case 'build-graph': {
-          if (!binaryIndex || !metadata) {
-            throw new Error('Index not loaded')
-          }
-
-          const { seedIdxs, requestId, filters } = payload as {
-            seedIdxs: number[]
-            requestId?: number
-            filters?: { categories: string[]; yearRange: [number, number] | null }
-          }
-
-          if (requestId !== undefined) currentRequestId = requestId
-
-          const bytesPerPaper = config.dimension / 8
-          const numPapers = metadata.titles.length
-          const neighborsPerSeed = 4
-          const maxNodes = 50
-
-          const nodeIdxs = new Set(seedIdxs)
-
-          for (const seedIdx of seedIdxs) {
-            if (nodeIdxs.size >= maxNodes) break
-            const seedBinary = binaryIndex.subarray(seedIdx * bytesPerPaper, (seedIdx + 1) * bytesPerPaper)
-            const candidates: Array<{ idx: number; dist: number }> = []
-            for (let i = 0; i < numPapers; i++) {
-              if (i === seedIdx || nodeIdxs.has(i)) continue
-              if (!passesFilters(metadata, i, filters)) continue
-              const paperBinary = binaryIndex.subarray(i * bytesPerPaper, (i + 1) * bytesPerPaper)
-              candidates.push({ idx: i, dist: hammingDistance(seedBinary, paperBinary) })
+          // Scoped try/catch: a graph failure (e.g. a stale/out-of-range
+          // seed idx) must not surface as the generic 'error' message,
+          // which puts the whole app into its global error stage — the
+          // graph is a secondary view over an already-successful search.
+          try {
+            if (!binaryIndex || !metadata) {
+              throw new Error('Index not loaded')
             }
-            candidates.sort((a, b) => a.dist - b.dist)
-            for (const c of candidates.slice(0, neighborsPerSeed)) {
-              nodeIdxs.add(c.idx)
+
+            const { seedIdxs, requestId, filters } = payload as {
+              seedIdxs: number[]
+              requestId?: number
+              filters?: { categories: string[]; yearRange: [number, number] | null }
+            }
+
+            if (requestId !== undefined) currentGraphRequestId = requestId
+
+            const bytesPerPaper = config.dimension / 8
+            const numPapers = metadata.titles.length
+            const neighborsPerSeed = 4
+            const maxNodes = 50
+
+            const nodeIdxs = new Set(seedIdxs)
+
+            for (const seedIdx of seedIdxs) {
               if (nodeIdxs.size >= maxNodes) break
+              const seedBinary = binaryIndex.subarray(seedIdx * bytesPerPaper, (seedIdx + 1) * bytesPerPaper)
+              // Keep only the best neighborsPerSeed candidates as we scan,
+              // instead of collecting ~numPapers entries and sorting them —
+              // the full-sort version blocked the worker for seconds.
+              const best: Array<{ idx: number; dist: number }> = []
+              for (let i = 0; i < numPapers; i++) {
+                if (i === seedIdx || nodeIdxs.has(i)) continue
+                if (!passesFilters(metadata, i, filters)) continue
+                const paperBinary = binaryIndex.subarray(i * bytesPerPaper, (i + 1) * bytesPerPaper)
+                const dist = hammingDistance(seedBinary, paperBinary)
+                if (best.length < neighborsPerSeed) {
+                  best.push({ idx: i, dist })
+                  if (best.length === neighborsPerSeed) best.sort((a, b) => a.dist - b.dist)
+                } else if (dist < best[best.length - 1].dist) {
+                  best[best.length - 1] = { idx: i, dist }
+                  for (let j = best.length - 1; j > 0 && best[j].dist < best[j - 1].dist; j--) {
+                    [best[j], best[j - 1]] = [best[j - 1], best[j]]
+                  }
+                }
+              }
+              for (const c of best) {
+                nodeIdxs.add(c.idx)
+                if (nodeIdxs.size >= maxNodes) break
+              }
             }
-          }
 
-          if (requestId !== undefined && requestId !== currentRequestId) break
+            if (requestId !== undefined && requestId !== currentGraphRequestId) break
 
-          const nodes = Array.from(nodeIdxs)
-          const dim = config.dimension
+            const nodes = Array.from(nodeIdxs)
+            const dim = config.dimension
 
-          // Pairwise distances within the node set (small — n <= maxNodes).
-          const distances = new Map<string, number>()
-          const pairKey = (a: number, b: number) => a < b ? `${a}:${b}` : `${b}:${a}`
-          for (let a = 0; a < nodes.length; a++) {
-            const binA = binaryIndex.subarray(nodes[a] * bytesPerPaper, (nodes[a] + 1) * bytesPerPaper)
-            for (let b = a + 1; b < nodes.length; b++) {
-              const binB = binaryIndex.subarray(nodes[b] * bytesPerPaper, (nodes[b] + 1) * bytesPerPaper)
-              distances.set(pairKey(nodes[a], nodes[b]), hammingDistance(binA, binB))
+            // Pairwise distances within the node set (small — n <= maxNodes).
+            const distances = new Map<string, number>()
+            const pairKey = (a: number, b: number) => a < b ? `${a}:${b}` : `${b}:${a}`
+            for (let a = 0; a < nodes.length; a++) {
+              const binA = binaryIndex.subarray(nodes[a] * bytesPerPaper, (nodes[a] + 1) * bytesPerPaper)
+              for (let b = a + 1; b < nodes.length; b++) {
+                const binB = binaryIndex.subarray(nodes[b] * bytesPerPaper, (nodes[b] + 1) * bytesPerPaper)
+                distances.set(pairKey(nodes[a], nodes[b]), hammingDistance(binA, binB))
+              }
             }
-          }
 
-          // Each node connects to its 3 nearest other nodes in the set.
-          const edgeKeys = new Set<string>()
-          const edges: Array<{ source: number; target: number; weight: number }> = []
-          for (const nodeIdx of nodes) {
-            const neighborDists = nodes
-              .filter(other => other !== nodeIdx)
-              .map(other => ({ other, dist: distances.get(pairKey(nodeIdx, other))! }))
-              .sort((a, b) => a.dist - b.dist)
-              .slice(0, 3)
-            for (const { other, dist } of neighborDists) {
-              const key = pairKey(nodeIdx, other)
-              if (edgeKeys.has(key)) continue
-              edgeKeys.add(key)
-              edges.push({ source: nodeIdx, target: other, weight: 1 - dist / dim })
+            // Each node connects to its 3 nearest other nodes in the set.
+            const edgeKeys = new Set<string>()
+            const edges: Array<{ source: number; target: number; weight: number }> = []
+            for (const nodeIdx of nodes) {
+              const neighborDists = nodes
+                .filter(other => other !== nodeIdx)
+                .map(other => ({ other, dist: distances.get(pairKey(nodeIdx, other))! }))
+                .sort((a, b) => a.dist - b.dist)
+                .slice(0, 3)
+              for (const { other, dist } of neighborDists) {
+                const key = pairKey(nodeIdx, other)
+                if (edgeKeys.has(key)) continue
+                edgeKeys.add(key)
+                edges.push({ source: nodeIdx, target: other, weight: 1 - dist / dim })
+              }
             }
-          }
 
-          const seedSet = new Set(seedIdxs)
-          self.postMessage({
-            type: 'graph',
-            payload: {
-              nodes: nodes.map(idx => ({
-                idx,
-                arxiv_id: metadata!.arxiv_ids[idx],
-                title: metadata!.titles[idx],
-                categories: metadata!.categories[idx],
-                isSeed: seedSet.has(idx),
-              })),
-              edges,
-            },
-            requestId,
-          })
+            const seedSet = new Set(seedIdxs)
+            self.postMessage({
+              type: 'graph',
+              payload: {
+                nodes: nodes.map(idx => ({
+                  idx,
+                  arxiv_id: metadata!.arxiv_ids[idx],
+                  title: metadata!.titles[idx],
+                  categories: metadata!.categories[idx],
+                  isSeed: seedSet.has(idx),
+                })),
+                edges,
+              },
+              requestId,
+            })
+          } catch (graphError) {
+            self.postMessage({
+              type: 'graph-error',
+              payload: graphError instanceof Error ? graphError.message : 'Unknown error',
+              requestId: (payload as { requestId?: number })?.requestId,
+            })
+          }
           break
         }
       }

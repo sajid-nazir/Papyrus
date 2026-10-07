@@ -22,6 +22,7 @@ type WorkerMessageType =
   | 'similar-hamming'
   | 'categories-summary'
   | 'graph'
+  | 'graph-error'
   | 'error'
 
 interface WorkerMessage {
@@ -53,6 +54,14 @@ export function useMLWorker() {
   const workerRef = useRef<Worker | null>(null)
   const readyRef = useRef(false)
   const requestIdRef = useRef(0)
+  // Separate from requestIdRef: search/find-similar and the graph are
+  // independent operations that can be in flight at once (the Graph button
+  // is reachable while stage is still 'searching', since Results.tsx keeps
+  // showing the previous result set). Sharing one counter/one
+  // currentRequestId in the worker meant building a graph mid-search would
+  // overwrite the worker's staleness-check id and cause the search's own
+  // results to be silently dropped as "stale".
+  const graphRequestIdRef = useRef(0)
   const abortControllerRef = useRef<AbortController | null>(null)
 
   const {
@@ -72,6 +81,7 @@ export function useMLWorker() {
     setPaperDetails,
     setDetailsLoading,
     setGraph,
+    setGraphOpen,
   } = useSearchStore()
 
   useEffect(() => {
@@ -160,8 +170,20 @@ export function useMLWorker() {
 
         case 'graph': {
           const msgRequestId = (event.data as { requestId?: number }).requestId
-          if (msgRequestId !== undefined && msgRequestId !== requestIdRef.current) break
+          if (msgRequestId !== undefined && msgRequestId !== graphRequestIdRef.current) break
           setGraph(payload as GraphData)
+          break
+        }
+
+        case 'graph-error': {
+          const msgRequestId = (event.data as { requestId?: number }).requestId
+          if (msgRequestId !== undefined && msgRequestId !== graphRequestIdRef.current) break
+          console.warn('[graph] Failed to build graph:', payload)
+          // Close the panel rather than leaving it stuck on "Building
+          // graph…" forever — this is a secondary view, not worth taking
+          // the whole app to the global error stage over.
+          setGraph(null)
+          setGraphOpen(false)
           break
         }
 
@@ -225,7 +247,7 @@ export function useMLWorker() {
       abortControllerRef.current?.abort()
       worker.terminate()
     }
-  }, [setStage, setSubstep, setDevice, setError, updateProgress, setIndexLoaded, setModelsLoaded, setResults, addToHistory, setAvailableCategories, setIsReranking, setRerankerReady, setPaperDetails, setDetailsLoading, setGraph])
+  }, [setStage, setSubstep, setDevice, setError, updateProgress, setIndexLoaded, setModelsLoaded, setResults, addToHistory, setAvailableCategories, setIsReranking, setRerankerReady, setPaperDetails, setDetailsLoading, setGraph, setGraphOpen])
 
   const search = useCallback(
     (query: string, topK = 10, candidates = 300) => {
@@ -265,11 +287,11 @@ export function useMLWorker() {
   const buildGraph = useCallback(
     (seedIdxs: number[]) => {
       if (!workerRef.current || !readyRef.current) return
-      requestIdRef.current += 1
+      graphRequestIdRef.current += 1
       const { filters } = useSearchStore.getState()
       workerRef.current.postMessage({
         type: 'build-graph',
-        payload: { seedIdxs, filters, requestId: requestIdRef.current },
+        payload: { seedIdxs, filters, requestId: graphRequestIdRef.current },
       })
     },
     []
