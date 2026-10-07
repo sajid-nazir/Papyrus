@@ -69,11 +69,33 @@ use when picked up:
 but there's no type safety on the Pages Functions. Worth fixing if you
 add more to them.
 
-**Also:** no browser automation tool was available this session (Chrome
-extension not connected, no built-in browser) — UI changes (Progress
-buttons, GraphView) were verified via lint/build/dev-server-serves-ok but
-not visually clicked through. Worth an actual look before merging.
+**Browser verification, done.** Claude in Chrome got connected mid-session,
+which led to finding and fixing a real bug: `vite.config.ts` read
+`process.env.VITE_R2_DATA_URL` directly, but Vite doesn't populate
+`process.env` from `.env`/`.env.local` files inside the config file itself
+— only `loadEnv()` does that. So a local `.env.local` was silently
+ignored, and the only way to get real data in local dev was exporting the
+var by hand in the shell. Fixed with an explicit `loadEnv()` call
+(`process.env` still checked first, so Cloudflare Pages' own build-time
+injection is untouched). Also, unrelated discovery along the way: the R2
+subscription on your Cloudflare account had been removed at some point;
+re-adding it didn't immediately show the bucket in the dashboard, but the
+bucket's public data was never actually inaccessible — the live site kept
+working throughout. Found the public R2 URL by grepping it out of the
+deployed worker bundle (`__R2_DATA_URL__` gets inlined as a literal at
+build time) rather than through the dashboard.
+
+With real data loading locally, visually verified end-to-end in a real
+browser: index/embedder/reranker all load, search works, abstracts fetch
+via the hardened arxiv-proxy, the new Graph toggle builds and renders a
+real similarity graph (nodes, edges, force layout, category colors, seed
+sizing), clicking a graph node correctly triggers Find Similar and resets
+graph state, and the Progress "Clear cached data"/"Retry" buttons render
+correctly in both the error and ready states. Zero console errors or
+warnings throughout. This closes out the "not visually confirmed" caveat
+from earlier in this same session.
 
 **Next:** review `git log main..dev --stat` and merge to `main` when
 ready — nothing pushed or merged automatically. If picking up multi-source
-search next, start from the design above.
+search next, start from the design above. A `.env.local` with the R2 data
+URL now exists locally (gitignored) for future sessions to use directly.
