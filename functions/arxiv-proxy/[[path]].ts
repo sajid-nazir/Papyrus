@@ -4,7 +4,7 @@
 // path, an arbitrary search_query, more IDs than a search ever returns) is
 // rejected outright rather than forwarded, so this can't be turned into a
 // general-purpose arXiv API relay.
-const ARXIV_ID_RE = /^(\d{4}\.\d{4,5}|[a-z-]+(\.[A-Z]{2})?\/\d{7})$/
+const ARXIV_ID_RE = /^(\d{4}\.\d{4,5}|[a-z-]+(\.[A-Z]{2})?\/\d{7})(v\d+)?$/
 const MAX_IDS = 20
 
 export async function onRequest(context: {
@@ -31,13 +31,18 @@ export async function onRequest(context: {
   if (rawIds.length === 0 || rawIds.length > MAX_IDS) {
     return new Response(`id_list must have 1-${MAX_IDS} ids`, { status: 400 })
   }
-  if (!rawIds.every(id => ARXIV_ID_RE.test(id))) {
-    return new Response('Invalid arXiv id in id_list', { status: 400 })
+
+  // Drop individually-invalid ids rather than rejecting the whole batch —
+  // one malformed id (an unexpected format, a client-side bug) shouldn't
+  // cost the other 9 results their abstracts.
+  const validIds = rawIds.filter(id => ARXIV_ID_RE.test(id))
+  if (validIds.length === 0) {
+    return new Response('No valid arXiv ids in id_list', { status: 400 })
   }
 
   // Sorted + deduped ids both normalize the cache key and match upstream's
   // own behavior (order doesn't matter — arxiv-api.ts keys results by id).
-  const ids = [...new Set(rawIds)].sort()
+  const ids = [...new Set(validIds)].sort()
   const target = `https://export.arxiv.org/api/query?id_list=${ids.join(',')}&max_results=${ids.length}`
 
   const cache = caches.default
