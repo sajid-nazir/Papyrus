@@ -87,15 +87,77 @@ build time) rather than through the dashboard.
 
 With real data loading locally, visually verified end-to-end in a real
 browser: index/embedder/reranker all load, search works, abstracts fetch
-via the hardened arxiv-proxy, the new Graph toggle builds and renders a
-real similarity graph (nodes, edges, force layout, category colors, seed
-sizing), clicking a graph node correctly triggers Find Similar and resets
-graph state, and the Progress "Clear cached data"/"Retry" buttons render
-correctly in both the error and ready states. Zero console errors or
-warnings throughout. This closes out the "not visually confirmed" caveat
-from earlier in this same session.
+and the Graph toggle builds/renders a real similarity graph (nodes,
+edges, force layout, category colors, seed sizing), clicking a graph node
+correctly triggers Find Similar, and the Progress "Clear cached
+data"/"Retry" buttons render correctly. Zero console errors throughout.
+**Correction to an earlier overclaim in this same entry:** that browser
+session ran on `pnpm run dev` (plain Vite), where `/arxiv-proxy` and
+`/hf-proxy` are rewritten straight to the upstream APIs by
+`vite.config.ts`'s `server.proxy` — the actual Pages Functions code never
+runs there, so that session did not exercise the hardened validation
+logic at all, only the app's own request-forming logic. The Functions'
+validation/caching behavior was only ever exercised via `wrangler pages
+dev` + synthetic curl requests (see below) — correct to call that
+verified, but the earlier claim that the *browser* session "fetched via
+the hardened arxiv-proxy" was wrong. Neither was deployed and hit for
+real; that's still a genuine gap, see below.
+
+**Independent second-opinion review (Fable), done** — asked it to
+scrutinize specifically the claims above rather than trust them. Found
+one blocking bug and several real secondary issues, all fixed and
+verified (lint/build clean, re-tested relevant pieces under `wrangler
+pages dev`):
+- **Blocking:** `buildGraph` shared its requestId counter with
+  search/find-similar on both the main thread and in the worker.
+  Clicking the Graph button (reachable mid-search, since Results.tsx
+  keeps showing the previous result set while `stage === 'searching'`)
+  would overwrite the worker's staleness-check id and cause the
+  in-flight search/rerank's own results to be silently dropped, with
+  `isReranking` or `stage` potentially stuck forever. Fixed with a
+  separate counter end to end.
+- The graph's neighbor search fully sorted ~1M candidates per seed to
+  keep the top 4 — blocked the worker for seconds. Switched to a bounded
+  top-k insertion.
+- A graph failure went through the generic `'error'` path, taking the
+  *whole app* into its global error stage over a secondary feature.
+  Scoped to its own try/catch and `'graph-error'` message.
+- `arxiv-proxy` rejected an entire 10-id batch over one malformed id;
+  now drops only the invalid ones. Also widened the id regex to accept
+  version suffixes it was incorrectly rejecting.
+- `hf-proxy` didn't actually enforce "resolve/main only" despite the
+  comment claiming it did, and had no real edge caching (same
+  `caches.default` gap arxiv-proxy had already been fixed for) — only
+  arxiv-proxy's caching could be confirmed working locally; hf-proxy's
+  could not be confirmed despite matching the same pattern (several
+  attempts, including stripping an upstream `Vary: Origin` header that
+  looked like a plausible cause) — documented as unverified rather than
+  claimed fixed; needs a post-deploy check.
+- `clearCacheExceptPrefix` read every cached blob's full value just to
+  check its key — switched to a key-only cursor.
+- The earlier SearchBox search-history key fix (`${h}-${i}`) didn't
+  actually fix the bug it claimed to (the index was still in the key) —
+  corrected to `key={h}` alone, which `addToHistory`'s existing dedup
+  makes sufficient.
+- `clearAllCachedData()` had no error handling; a failure silently did
+  nothing. Now surfaces a message.
+- **Not fixed, noted as pre-existing:** `find-similar` doesn't apply the
+  active category/year filters (search and build-graph both do), so a
+  graph built from Find Similar results can mix filtered neighbors with
+  an unfiltered seed set. Predates this session's work; left alone
+  rather than changing an existing feature's behavior out of scope.
+
+**Still open — genuinely not verified against production:** nothing in
+this branch has been deployed and exercised against the real
+`*.pages.dev` environment. All Functions testing used local emulation
+(`wrangler pages dev`, which Cloudflare's own docs note behaves
+differently from production for the Cache API specifically). Treat the
+proxy hardening as implemented and locally self-consistent, not as
+confirmed-in-production.
 
 **Next:** review `git log main..dev --stat` and merge to `main` when
-ready — nothing pushed or merged automatically. If picking up multi-source
-search next, start from the design above. A `.env.local` with the R2 data
-URL now exists locally (gitignored) for future sessions to use directly.
+ready — nothing pushed or merged automatically. After merging/deploying,
+worth specifically re-checking hf-proxy's edge caching against the real
+`*.pages.dev` Cache API. If picking up multi-source search next, start
+from the design above. A `.env.local` with the R2 data URL now exists
+locally (gitignored) for future sessions to use directly.
