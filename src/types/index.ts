@@ -74,3 +74,19 @@ export interface PaperDetail {
   authors: string[]
   published: string
 }
+
+export interface GraphNode extends Paper {
+  idx: number
+  isSeed: boolean
+}
+
+export interface GraphEdge {
+  source: number
+  target: number
+  weight: number
+}
+
+export interface GraphData {
+  nodes: GraphNode[]
+  edges: GraphEdge[]
+}

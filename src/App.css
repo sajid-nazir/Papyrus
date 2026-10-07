@@ -181,6 +181,12 @@ header h1 {
 .result-card.cat-fin    { border-left: 3px solid #7C5A3C; padding-left: 10px; }
 .result-card.cat-other  { border-left: 3px solid var(--border); padding-left: 10px; }
 
+/* Graph view */
+.graph-view { margin-bottom: 16px; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+.graph-caption { padding: 6px 10px; font-size: 0.75rem; color: var(--text-muted); border-bottom: 1px solid var(--border-light); }
+.graph-container { height: 400px; background: var(--surface); }
+.graph-loading { padding: 16px; font-size: 0.875rem; color: var(--text-muted); text-align: center; }
+
 .rank { font-size: 0.8rem; color: var(--text-muted); min-width: 20px; padding-top: 2px; }
 
 .result-content { flex: 1; }

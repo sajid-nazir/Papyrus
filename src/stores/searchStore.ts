@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { immer } from 'zustand/middleware/immer'
-import type { Stage, Substep, LoadingProgress, SearchResult, DeviceType, FilterState, CategorySummary, PaperDetail } from '../types'
+import type { Stage, Substep, LoadingProgress, SearchResult, DeviceType, FilterState, CategorySummary, PaperDetail, GraphData } from '../types'
 
 interface SearchState {
   // Loading state
@@ -29,6 +29,8 @@ interface SearchState {
   similarStack: Array<{ title: string | null; results: SearchResult[] }>
   paperDetails: Record<string, PaperDetail>
   detailsLoading: boolean
+  graph: GraphData | null
+  graphOpen: boolean
 
   // Actions
   setStage: (stage: Stage) => void
@@ -52,6 +54,8 @@ interface SearchState {
   setIsReranking: (v: boolean) => void
   setPaperDetails: (details: Record<string, PaperDetail>) => void
   setDetailsLoading: (v: boolean) => void
+  setGraph: (graph: GraphData | null) => void
+  setGraphOpen: (open: boolean) => void
   reset: () => void
 }
 
@@ -76,6 +80,8 @@ const initialState = {
   similarStack: [],
   paperDetails: {},
   detailsLoading: false,
+  graph: null as GraphData | null,
+  graphOpen: false,
 }
 
 export const useSearchStore = create<SearchState>()(
@@ -152,6 +158,8 @@ export const useSearchStore = create<SearchState>()(
           state.isReranking = false
           if (!state.similarQuery) state.similarStack = []
           if (state.stage === 'searching') state.stage = 'ready'
+          state.graph = null
+          state.graphOpen = false
         }),
 
       addToHistory: (query) =>
@@ -212,6 +220,16 @@ export const useSearchStore = create<SearchState>()(
       setDetailsLoading: (v) =>
         set((state) => {
           state.detailsLoading = v
+        }),
+
+      setGraph: (graph) =>
+        set((state) => {
+          state.graph = graph
+        }),
+
+      setGraphOpen: (open) =>
+        set((state) => {
+          state.graphOpen = open
         }),
 
       reset: () => set(() => initialState),

@@ -1,18 +1,29 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { useSearchStore } from '../stores/searchStore'
+import { catClass } from '../lib/categories'
+
+const GraphView = lazy(() => import('./GraphView').then(m => ({ default: m.GraphView })))
 
 interface ResultsProps {
   onFindSimilar: (idx: number, title: string) => void
+  onBuildGraph: (seedIdxs: number[]) => void
 }
 
-export function Results({ onFindSimilar }: ResultsProps) {
+export function Results({ onFindSimilar, onBuildGraph }: ResultsProps) {
   const {
     results, stage, resultQuery, similarQuery, similarStack,
     isReranking, rerankerReady, paperDetails, detailsLoading,
+    graph, graphOpen, setGraphOpen,
   } = useSearchStore()
   const [copied, setCopied] = useState(false)
   const [copiedBibtex, setCopiedBibtex] = useState<string | null>(null)
   const [expandedAbstracts, setExpandedAbstracts] = useState<Set<string>>(new Set())
+
+  function toggleGraph() {
+    const open = !graphOpen
+    setGraphOpen(open)
+    if (open) onBuildGraph(results.map(r => r.idx))
+  }
 
   function toggleAbstract(arxivId: string) {
     setExpandedAbstracts(prev => {
@@ -30,18 +41,6 @@ export function Results({ onFindSimilar }: ResultsProps) {
     navigator.clipboard.writeText(window.location.href)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
-  }
-
-  function catClass(categories: string) {
-    const primary = categories.split(' ')[0]
-    if (primary.startsWith('cs.')) return 'cat-cs'
-    if (primary.startsWith('math.')) return 'cat-math'
-    if (/^(physics|hep-|astro-|cond-mat|quant-|gr-|nucl-)/.test(primary)) return 'cat-physics'
-    if (primary.startsWith('stat.')) return 'cat-stat'
-    if (primary.startsWith('eess.')) return 'cat-eess'
-    if (primary.startsWith('q-bio.')) return 'cat-bio'
-    if (primary.startsWith('q-fin.')) return 'cat-fin'
-    return 'cat-other'
   }
 
   function copyBibtex(arxivId: string, title: string) {
@@ -82,6 +81,9 @@ export function Results({ onFindSimilar }: ResultsProps) {
             <span className="results-meta">{results.length} papers for "{resultQuery}"</span>
           </>
         )}
+        <button className="copy-link-btn" onClick={toggleGraph}>
+          {graphOpen ? 'Hide Graph' : 'Graph'}
+        </button>
         <button className="copy-link-btn" onClick={copyLink}>
           {copied ? 'Copied!' : 'Copy Link'}
         </button>
@@ -92,6 +94,15 @@ export function Results({ onFindSimilar }: ResultsProps) {
         <div className="reranker-banner">
           Reranker loading — results sorted by embedding similarity only
         </div>
+      )}
+
+      {graphOpen && (
+        <Suspense fallback={<div className="graph-loading">Loading graph…</div>}>
+          <GraphView
+            graph={graph}
+            onNodeClick={(idx, title) => onFindSimilar(idx, title)}
+          />
+        </Suspense>
       )}
 
       {results.map((result) => {
