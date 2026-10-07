@@ -523,11 +523,12 @@ export function createSearchWorker(config: ModelConfig): void {
             throw new Error('Index not loaded')
           }
 
-          const { idx, topK = 10, candidates = 300, requestId } = payload as {
+          const { idx, topK = 10, candidates = 300, requestId, filters } = payload as {
             idx: number
             topK?: number
             candidates?: number
             requestId?: number
+            filters?: { categories: string[]; yearRange: [number, number] | null }
           }
 
           if (requestId !== undefined) currentRequestId = requestId
@@ -541,6 +542,7 @@ export function createSearchWorker(config: ModelConfig): void {
 
           for (let i = 0; i < numPapers; i++) {
             if (i === idx) continue
+            if (!passesFilters(metadata, i, filters)) continue
             const paperBinary = binaryIndex.subarray(i * bytesPerPaper, (i + 1) * bytesPerPaper)
             candidateResults.push({ idx: i, dist: hammingDistance(queryBinary, paperBinary) })
           }
