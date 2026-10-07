@@ -63,11 +63,8 @@ use when picked up:
   features (Find Similar, Graph seed) don't apply to external results in
   v1.
 
-**Known gap, not addressed this session:** `tsconfig.app.json` only
-`include`s `src/`, so `tsc -b` never type-checks `functions/*.ts` at all
-(pre-existing, not introduced by anything above) — eslint does lint them,
-but there's no type safety on the Pages Functions. Worth fixing if you
-add more to them.
+**`functions/*.ts` type-checking gap — fixed later in this session**, see
+below.
 
 **Browser verification, done.** Claude in Chrome got connected mid-session,
 which led to finding and fixing a real bug: `vite.config.ts` read
@@ -141,11 +138,25 @@ pages dev`):
   makes sufficient.
 - `clearAllCachedData()` had no error handling; a failure silently did
   nothing. Now surfaces a message.
-- **Not fixed, noted as pre-existing:** `find-similar` doesn't apply the
-  active category/year filters (search and build-graph both do), so a
-  graph built from Find Similar results can mix filtered neighbors with
-  an unfiltered seed set. Predates this session's work; left alone
-  rather than changing an existing feature's behavior out of scope.
+- `find-similar` not applying active category/year filters (unlike
+  search and build-graph) — flagged as pre-existing and left alone at
+  the time; fixed later in this session, see below.
+
+**Known-gaps cleanup round, done** (user went AFK, explicitly scoped this
+round to "fix remaining known gaps" only — no push to remote, no merge to
+main, both confirmed with them beforehand):
+- `find-similar` now applies active filters, reusing the same
+  `passesFilters()` helper and payload shape as search/build-graph.
+  Verified in a real browser: set the cs.AI filter, searched, clicked
+  Find Similar — every result correctly carried cs.AI. Zero console
+  errors.
+- `functions/*.ts` is now actually type-checked: added
+  `@cloudflare/workers-types` and a new `tsconfig.functions.json`
+  (modeled on the existing `tsconfig.node.json` pattern), referenced
+  from the root `tsconfig.json` so `tsc -b` — already the first half of
+  `npm run build` — picks it up with no workflow change. Verified by
+  deliberately injecting a type error into `arxiv-proxy` and confirming
+  the build caught it, then reverting.
 
 **Still open — genuinely not verified against production:** nothing in
 this branch has been deployed and exercised against the real
@@ -153,7 +164,8 @@ this branch has been deployed and exercised against the real
 (`wrangler pages dev`, which Cloudflare's own docs note behaves
 differently from production for the Cache API specifically). Treat the
 proxy hardening as implemented and locally self-consistent, not as
-confirmed-in-production.
+confirmed-in-production. Explicitly NOT pushed this round per the user's
+instruction — they want to review before anything touches the remote.
 
 **Next:** review `git log main..dev --stat` and merge to `main` when
 ready — nothing pushed or merged automatically. After merging/deploying,
