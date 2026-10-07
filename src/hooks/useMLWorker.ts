@@ -273,12 +273,13 @@ export function useMLWorker() {
     (idx: number, title: string) => {
       if (!workerRef.current || !readyRef.current) return
       requestIdRef.current += 1
+      const { filters } = useSearchStore.getState()
       useSearchStore.getState().setError(null)
       setSimilarQuery(title)
       setStage('searching')
       workerRef.current.postMessage({
         type: 'find-similar',
-        payload: { idx, topK: 10, candidates: 300, requestId: requestIdRef.current },
+        payload: { idx, topK: 10, candidates: 300, filters, requestId: requestIdRef.current },
       })
     },
     [setSimilarQuery, setStage]
