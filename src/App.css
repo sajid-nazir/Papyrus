@@ -147,8 +147,8 @@ header h1 {
 
 /* Progress */
 .progress { margin-bottom: 16px; font-size: 0.875rem; color: var(--text-muted); }
-.progress-ready { margin-bottom: 12px; font-size: 0.875rem; color: var(--text-muted); }
-.progress-error { margin-bottom: 12px; color: #c00; }
+.progress-ready { margin-bottom: 12px; font-size: 0.875rem; color: var(--text-muted); display: flex; align-items: center; gap: 8px; }
+.progress-error { margin-bottom: 12px; color: #c00; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .progress-stage { font-weight: 500; margin-bottom: 4px; }
 .progress-substep { color: var(--text-muted); margin-bottom: 6px; }
 
