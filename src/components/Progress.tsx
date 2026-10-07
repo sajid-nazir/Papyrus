@@ -16,8 +16,13 @@ function formatBytes(bytes: number): string {
 function ClearCacheButton({ totalLabel }: { totalLabel: string }) {
   async function handleClick() {
     if (!window.confirm(`Delete ~${totalLabel} of cached index and models? The app will re-download on reload.`)) return
-    await clearAllCachedData()
-    window.location.reload()
+    try {
+      await clearAllCachedData()
+      window.location.reload()
+    } catch (e) {
+      console.error('[cache] Failed to clear cached data:', e)
+      window.alert('Failed to clear cached data. Check the browser console for details.')
+    }
   }
   return <button className="copy-link-btn" onClick={handleClick}>Clear cached data</button>
 }

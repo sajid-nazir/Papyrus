@@ -45,8 +45,8 @@ export function SearchBox({ onSearch }: SearchBoxProps) {
       </div>
       {showHistory && searchHistory.length > 0 && (
         <ul className="search-history">
-          {searchHistory.map((h, i) => (
-            <li key={`${h}-${i}`} onMouseDown={() => { setQuery(h); setShowHistory(false); if (isReady) onSearch(h) }}>
+          {searchHistory.map((h) => (
+            <li key={h} onMouseDown={() => { setQuery(h); setShowHistory(false); if (isReady) onSearch(h) }}>
               {h}
             </li>
           ))}
