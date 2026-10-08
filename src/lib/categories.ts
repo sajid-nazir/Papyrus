@@ -26,3 +26,18 @@ export function catClass(categories: string): string {
 export function catColor(categories: string): string {
   return CATEGORY_COLORS[catClass(categories)]
 }
+
+const CATEGORY_SHORT_NAMES: Record<string, string> = {
+  'cat-cs': 'CS',
+  'cat-math': 'Math',
+  'cat-physics': 'Physics',
+  'cat-stat': 'Stat',
+  'cat-eess': 'EESS',
+  'cat-bio': 'Bio',
+  'cat-fin': 'Fin',
+  'cat-other': 'Other',
+}
+
+export function catShortName(categories: string): string {
+  return CATEGORY_SHORT_NAMES[catClass(categories)]
+}
