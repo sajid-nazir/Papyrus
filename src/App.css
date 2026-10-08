@@ -182,10 +182,39 @@ header h1 {
 .result-card.cat-other  { border-left: 3px solid var(--border); padding-left: 10px; }
 
 /* Graph view */
-.graph-view { margin-bottom: 16px; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
-.graph-caption { padding: 6px 10px; font-size: 0.75rem; color: var(--text-muted); border-bottom: 1px solid var(--border-light); }
-.graph-container { height: 400px; background: var(--surface); }
+.graph-view { position: relative; margin-bottom: 16px; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+.graph-caption {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  min-height: 2.6em;
+  padding: 6px 10px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-light);
+}
+.graph-caption-title { color: var(--text); flex: 1; min-width: 0; }
+.graph-caption-meta { white-space: nowrap; }
+.graph-legend { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.graph-legend-item { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.graph-legend-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+.graph-legend-dot-seed { background: var(--text-muted); width: 10px; height: 10px; }
+.graph-container { position: relative; height: 400px; background: var(--surface); }
 .graph-loading { padding: 16px; font-size: 0.875rem; color: var(--text-muted); text-align: center; }
+.graph-reset-btn {
+  position: absolute;
+  top: 48px;
+  right: 10px;
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.graph-reset-btn:hover { border-color: var(--text-muted); color: var(--text); }
 
 .rank { font-size: 0.8rem; color: var(--text-muted); min-width: 20px; padding-top: 2px; }
 
