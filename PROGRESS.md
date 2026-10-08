@@ -2,6 +2,30 @@
 
 Read this first when resuming. Keep only the current/most-recent state — prune stale entries, don't accumulate a full history (git log is the history).
 
+## 2026-10-08 — second AFK session: pushed dev, found a deployment-wiring gap
+
+User authorized pushing `dev` to remote this round (still no merge to `main`
+without them). Pushed — first time `dev` has existed on GitHub
+(`origin/dev` now tracks it).
+
+**Found while trying to verify via a Cloudflare Pages preview deploy:**
+the Papyrus Pages project isn't visible anywhere in the
+`Sajidchnazir@gmail.com` Cloudflare account's dashboard (confirmed two
+ways: empty project list, and a direct `/pages/view/papyrus` lookup
+returns "Not found") — yet that account's R2 bucket is the one actually
+serving the app's data (confirmed in the first AFK session), and the live
+site works. Checked the GitHub repo itself: **no webhook, no GitHub
+Actions workflow** — meaning there is no Git-based auto-deploy wired up
+at all between this repo and Cloudflare Pages. The live site must be
+getting deployed some other way (a manual `wrangler pages deploy` at some
+point, or a project connection under a login that isn't currently signed
+in anywhere in this browser). **This means pushing `dev` does NOT trigger
+a preview deployment** — the production-verification gap from the first
+session is still open, and closing it needs the user to either find the
+right Cloudflare login or tell me how deploys actually happen here. Not
+attempting a deploy myself — too close to production-affecting with the
+account state this unclear.
+
 ## 2026-10-07 — audit + roadmap item 1 (graph v1), on `dev`
 
 Full history is in commit messages: `git log main..dev --stat`. Summary:
