@@ -25,8 +25,9 @@ interface SearchState {
   filters: FilterState
   availableCategories: CategorySummary[]
   similarQuery: string | null
+  similarSeedIdx: number | null
   isReranking: boolean
-  similarStack: Array<{ title: string | null; results: SearchResult[] }>
+  similarStack: Array<{ title: string | null; seedIdx: number | null; results: SearchResult[] }>
   paperDetails: Record<string, PaperDetail>
   detailsLoading: boolean
   graph: GraphData | null
@@ -48,7 +49,7 @@ interface SearchState {
   setFilters: (filters: FilterState) => void
   setAvailableCategories: (cats: CategorySummary[]) => void
   resetFilters: () => void
-  setSimilarQuery: (title: string | null) => void
+  setSimilarQuery: (title: string | null, seedIdx: number | null) => void
   goBack: () => void
   clearSimilarHistory: () => void
   setIsReranking: (v: boolean) => void
@@ -76,8 +77,9 @@ const initialState = {
   filters: { categories: [], yearRange: null },
   availableCategories: [],
   similarQuery: null,
+  similarSeedIdx: null as number | null,
   isReranking: false,
-  similarStack: [],
+  similarStack: [] as Array<{ title: string | null; seedIdx: number | null; results: SearchResult[] }>,
   paperDetails: {},
   detailsLoading: false,
   graph: null as GraphData | null,
@@ -184,11 +186,12 @@ export const useSearchStore = create<SearchState>()(
           state.filters = { categories: [], yearRange: null }
         }),
 
-      setSimilarQuery: (title) =>
+      setSimilarQuery: (title, seedIdx) =>
         set((state) => {
           // Push current state onto stack before navigating forward
-          state.similarStack.push({ title: state.similarQuery, results: [...state.results] })
+          state.similarStack.push({ title: state.similarQuery, seedIdx: state.similarSeedIdx, results: [...state.results] })
           state.similarQuery = title
+          state.similarSeedIdx = seedIdx
         }),
 
       goBack: () =>
@@ -197,6 +200,7 @@ export const useSearchStore = create<SearchState>()(
           if (prev) {
             state.results = prev.results
             state.similarQuery = prev.title
+            state.similarSeedIdx = prev.seedIdx
           }
           state.isReranking = false
         }),
@@ -205,6 +209,7 @@ export const useSearchStore = create<SearchState>()(
         set((state) => {
           state.similarStack = []
           state.similarQuery = null
+          state.similarSeedIdx = null
         }),
 
       setIsReranking: (v) =>
