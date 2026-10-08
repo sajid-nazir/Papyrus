@@ -270,12 +270,15 @@ export function useMLWorker() {
   )
 
   const findSimilar = useCallback(
-    (idx: number, title: string) => {
+    // refresh: true re-runs the current "similar to" view (e.g. after a
+    // filter change) without pushing a new entry onto the back-navigation
+    // stack — a plain call always navigates forward.
+    (idx: number, title: string, options?: { refresh?: boolean }) => {
       if (!workerRef.current || !readyRef.current) return
       requestIdRef.current += 1
       const { filters } = useSearchStore.getState()
       useSearchStore.getState().setError(null)
-      setSimilarQuery(title)
+      if (!options?.refresh) setSimilarQuery(title, idx)
       setStage('searching')
       workerRef.current.postMessage({
         type: 'find-similar',

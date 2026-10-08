@@ -1,13 +1,16 @@
-// Shared with the result-card border colors in App.css (.result-card.cat-*) —
-// keep both in sync if either changes.
+// Single source of truth for category colors — result cards apply this via
+// inline style (borderLeftColor) rather than per-category CSS classes, so
+// there's nowhere else for this to drift out of sync. Picked for ~3.5-4.8:1
+// contrast against both the light (#fff) and dark (#111) backgrounds, and
+// to separate math/eess/fin, which were near-identical browns before.
 const CATEGORY_COLORS: Record<string, string> = {
-  'cat-cs': '#4A6B8A',
-  'cat-math': '#8B5E3C',
-  'cat-physics': '#6B4C8A',
-  'cat-stat': '#4A7C59',
-  'cat-eess': '#8A6B4A',
-  'cat-bio': '#3C7C7C',
-  'cat-fin': '#7C5A3C',
+  'cat-cs': '#4A7AB0',
+  'cat-math': '#B0703A',
+  'cat-physics': '#8A63B8',
+  'cat-stat': '#4C8A5C',
+  'cat-eess': '#9A8A2E',
+  'cat-bio': '#3A8A8A',
+  'cat-fin': '#B0566E',
   'cat-other': '#999999',
 }
 

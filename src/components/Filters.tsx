@@ -18,14 +18,24 @@ export function Filters() {
     setFilters({ ...filters, categories: next })
   }
 
-  function setFromYear(year: number) {
-    const to = filters.yearRange?.[1] ?? CURRENT_YEAR
-    setFilters({ ...filters, yearRange: [year, Math.max(year, to)] })
+  function setFromYear(value: string) {
+    const to = filters.yearRange?.[1] ?? null
+    if (value === '') {
+      setFilters({ ...filters, yearRange: to === null ? null : [1991, to] })
+      return
+    }
+    const year = Number(value)
+    setFilters({ ...filters, yearRange: [year, Math.max(year, to ?? CURRENT_YEAR)] })
   }
 
-  function setToYear(year: number) {
-    const from = filters.yearRange?.[0] ?? 1991
-    setFilters({ ...filters, yearRange: [Math.min(from, year), year] })
+  function setToYear(value: string) {
+    const from = filters.yearRange?.[0] ?? null
+    if (value === '') {
+      setFilters({ ...filters, yearRange: from === null ? null : [from, CURRENT_YEAR] })
+      return
+    }
+    const year = Number(value)
+    setFilters({ ...filters, yearRange: [Math.min(from ?? 1991, year), year] })
   }
 
   return (
@@ -50,7 +60,7 @@ export function Filters() {
         <select
           className="year-select"
           value={filters.yearRange?.[0] ?? ''}
-          onChange={(e) => setFromYear(Number(e.target.value))}
+          onChange={(e) => setFromYear(e.target.value)}
         >
           <option value="">From</option>
           {YEARS.map((y) => (
@@ -61,7 +71,7 @@ export function Filters() {
         <select
           className="year-select"
           value={filters.yearRange?.[1] ?? ''}
-          onChange={(e) => setToYear(Number(e.target.value))}
+          onChange={(e) => setToYear(e.target.value)}
         >
           <option value="">To</option>
           {YEARS.map((y) => (
