@@ -194,6 +194,21 @@ this round (same standing instruction).
   theme via an injected CSS override (no OS toggle available) to check
   both themes without needing to actually switch the OS/browser setting.
   Zero console errors throughout.
+- One more self-found issue while reviewing the new graph CSS: the Reset
+  button was absolutely positioned at a fixed `top: 48px` relative to
+  `.graph-view`, which only looked right because the caption row happens
+  to render at ~48px today — if the legend ever wraps to more lines (more
+  categories present, or a narrower viewport), the button would overlap
+  the caption text. Restructured so it's anchored to its own wrapper
+  around just the canvas, independent of caption height.
+
+**Environment note for future sessions:** `resize_window` (Claude in
+Chrome) did not actually change `window.innerWidth`/`innerHeight` in this
+session (tried twice, confirmed via JS eval) — window stayed at 1920x905
+throughout. True responsive/mobile-viewport testing wasn't possible this
+session; the reset-button fix above was reasoned through statically, not
+visually confirmed at a narrow width. Worth a real check (actual device,
+or a working resize) before fully trusting mobile layout.
 
 **Next:** review `git log main..dev --stat` and merge to `main` when
 ready — nothing pushed or merged automatically. After merging/deploying,
