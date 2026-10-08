@@ -167,6 +167,34 @@ proxy hardening as implemented and locally self-consistent, not as
 confirmed-in-production. Explicitly NOT pushed this round per the user's
 instruction — they want to review before anything touches the remote.
 
+**Design/polish round, done** — user went AFK a second time and gave open
+scope ("invent things"), flagging the graph's full-title labels as an
+example of what "doesn't look as good as it should." Still no push/merge
+this round (same standing instruction).
+- Consulted Opus specifically on graph UX (it read the installed sigma
+  3.x source for real API rather than working from memory). Implemented:
+  truncated on-canvas labels (seeds only, ~28 chars), full title + category
+  shown in the caption on hover instead, hover-based neighbor highlighting,
+  edge opacity encoding similarity weight, a minimal category legend,
+  camera guard rails, a Reset button, and a deterministic (non-random)
+  initial layout.
+- That consult also caught two actual bugs in the original graph v1:
+  labels were hard-coded black and invisible against the dark theme, and
+  sigma's wheel handler hijacked page scroll whenever the cursor was over
+  the graph. Both fixed.
+- Fixing the dark-mode label bug prompted a grep for the same class of
+  issue elsewhere: found `.memory-warning` had no dark-mode styling at
+  all, `.filters-reset`/`.progress-error` used a hard-coded red that's
+  muddier on dark backgrounds, and `src/index.css` (an untouched Vite
+  scaffold leftover) set a conflicting hard-coded `body` background/color
+  that only wasn't visibly broken by accident of CSS cascade order.
+  Added proper `--error`/`--warning-*` tokens and removed the dead
+  conflicting CSS.
+- All verified extensively in a real browser, including forcing the dark
+  theme via an injected CSS override (no OS toggle available) to check
+  both themes without needing to actually switch the OS/browser setting.
+  Zero console errors throughout.
+
 **Next:** review `git log main..dev --stat` and merge to `main` when
 ready — nothing pushed or merged automatically. After merging/deploying,
 worth specifically re-checking hf-proxy's edge caching against the real
