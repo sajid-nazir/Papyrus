@@ -214,13 +214,15 @@ export function GraphView({ graph, onNodeClick }: GraphViewProps) {
           </>
         )}
       </div>
-      <div ref={containerRef} className="graph-container" />
-      <button
-        className="graph-reset-btn"
-        onClick={() => sigmaRef.current?.getCamera().animatedReset()}
-      >
-        Reset
-      </button>
+      <div className="graph-canvas-wrap">
+        <div ref={containerRef} className="graph-container" />
+        <button
+          className="graph-reset-btn"
+          onClick={() => sigmaRef.current?.getCamera().animatedReset()}
+        >
+          Reset
+        </button>
+      </div>
     </div>
   )
 }
