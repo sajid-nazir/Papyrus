@@ -215,7 +215,12 @@ export function GraphView({ graph, onNodeClick }: GraphViewProps) {
         )}
       </div>
       <div className="graph-canvas-wrap">
-        <div ref={containerRef} className="graph-container" />
+        <div
+          ref={containerRef}
+          className="graph-container"
+          role="img"
+          aria-label="Similarity graph of these results. Decorative shortcut — every paper and its nearest neighbors are already listed below, where Find Similar does the same thing this graph's nodes do on click."
+        />
         <button
           className="btn-sm graph-reset-btn"
           onClick={() => sigmaRef.current?.getCamera().animatedReset()}

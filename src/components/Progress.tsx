@@ -28,7 +28,7 @@ export function Progress() {
   if (stage === 'idle') return <div className="progress">Starting…</div>
   if (stage === 'error') {
     return (
-      <div className="progress-error">
+      <div className="progress-error" role="alert">
         <span>Couldn't load Papyrus: {error}</span>
         <div className="actions-right">
           <button className="btn-sm" onClick={() => window.location.reload()}>Retry</button>
@@ -39,7 +39,7 @@ export function Progress() {
   }
   if (stage === 'ready' || stage === 'searching') {
     return (
-      <div className="progress-ready">
+      <div className="progress-ready" role="status" aria-live="polite">
         {paperCount.toLocaleString()} papers indexed · running on {device === 'webgpu' ? 'WebGPU' : 'CPU'}
         <div className="actions-right">
           <ClearCacheButton />
@@ -63,8 +63,10 @@ export function Progress() {
 
   return (
     <div className="progress">
-      <div className="progress-stage">{stageLabel[stage] ?? stage}</div>
-      {substep && <div className="progress-substep">{substepLabel[substep] ?? substep}</div>}
+      <div role="status" aria-live="polite">
+        <div className="progress-stage">{stageLabel[stage] ?? stage}</div>
+        {substep && <div className="progress-substep">{substepLabel[substep] ?? substep}</div>}
+      </div>
       {progress
         .filter((p) => p.total >= 1024 * 1024) // skip tiny config/tokenizer files — not worth their own bar
         .map((p) => (
