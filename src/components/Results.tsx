@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from 'react'
 import { useSearchStore } from '../stores/searchStore'
-import { catClass } from '../lib/categories'
+import { catColor } from '../lib/categories'
 
 const GraphView = lazy(() => import('./GraphView').then(m => ({ default: m.GraphView })))
 
@@ -12,7 +12,8 @@ interface ResultsProps {
 export function Results({ onFindSimilar, onBuildGraph }: ResultsProps) {
   const {
     results, stage, resultQuery, similarQuery, similarStack,
-    isReranking, rerankerReady, paperDetails, detailsLoading,
+    isReranking, resultsReranked, paperDetails, detailsLoading, detailsFailed,
+    filters, resetFilters,
     graph, graphOpen, setGraphOpen,
   } = useSearchStore()
   const [copied, setCopied] = useState(false)
@@ -60,7 +61,19 @@ export function Results({ onFindSimilar, onBuildGraph }: ResultsProps) {
   }
 
   if (stage === 'ready' && results.length === 0 && resultQuery) {
-    return <div className="results-empty">No papers matched your filters.</div>
+    const hasActiveFilters = filters.categories.length > 0 || filters.yearRange !== null
+    return (
+      <div className="results-empty">
+        {hasActiveFilters ? (
+          <>
+            No papers matched your filters.{' '}
+            <button className="back-btn" onClick={resetFilters}>Reset filters</button>
+          </>
+        ) : (
+          `No papers found for "${resultQuery}".`
+        )}
+      </div>
+    )
   }
 
   if (results.length === 0) return null
@@ -76,23 +89,24 @@ export function Results({ onFindSimilar, onBuildGraph }: ResultsProps) {
         {similarQuery ? (
           <h2 className="results-title">Similar to: <em>{similarQuery}</em></h2>
         ) : (
-          <>
-            <h2 className="results-title">Results</h2>
-            <span className="results-meta">{results.length} papers for "{resultQuery}"</span>
-          </>
+          <h2 className="results-title">"{resultQuery}"</h2>
         )}
-        <button className="copy-link-btn" onClick={toggleGraph}>
-          {graphOpen ? 'Hide Graph' : 'Graph'}
-        </button>
-        <button className="copy-link-btn" onClick={copyLink}>
-          {copied ? 'Copied!' : 'Copy Link'}
-        </button>
-        {isReranking && <span className="reranking-indicator">Reranking…</span>}
+        <span className="results-meta">
+          {isReranking ? 'Reranking…' : `${results.length} papers`}
+        </span>
+        <div className="actions-right">
+          <button className="btn-sm" onClick={toggleGraph}>
+            {graphOpen ? 'Hide Graph' : 'Graph'}
+          </button>
+          <button className="btn-sm" onClick={copyLink}>
+            {copied ? 'Copied!' : 'Copy Link'}
+          </button>
+        </div>
       </div>
 
-      {!rerankerReady && results.length > 0 && (
+      {!resultsReranked && results.length > 0 && (
         <div className="reranker-banner">
-          Reranker loading — results sorted by embedding similarity only
+          Fast results — refined ranking still loading. Search again in a moment for better ordering.
         </div>
       )}
 
@@ -107,8 +121,13 @@ export function Results({ onFindSimilar, onBuildGraph }: ResultsProps) {
 
       {results.map((result) => {
         const detail = paperDetails[result.arxiv_id]
+        const expanded = expandedAbstracts.has(result.arxiv_id)
         return (
-          <div key={result.arxiv_id} className={`result-card ${catClass(result.categories)}`}>
+          <div
+            key={result.arxiv_id}
+            className="result-card"
+            style={{ borderLeftColor: catColor(result.categories) }}
+          >
             <div className="rank">{result.rank}</div>
             <div className="result-content">
               <a
@@ -119,39 +138,63 @@ export function Results({ onFindSimilar, onBuildGraph }: ResultsProps) {
               >
                 {result.title}
               </a>
+
+              {detail && (
+                <div className="result-authors">
+                  {detail.authors.slice(0, 5).join(', ')}
+                  {detail.authors.length > 5 && ' et al.'}
+                </div>
+              )}
+
               <div className="meta">
-                <span className="arxiv-id">{result.arxiv_id}</span>
-                <span className="categories">{result.categories}</span>
-                <span className="score">{result.score.toFixed(3)}</span>
+                {detail && (
+                  <span>{new Date(detail.published).toLocaleDateString('en-US', { year: 'numeric', month: 'short' })}</span>
+                )}
+                <span>{result.categories.split(' ').join(', ')}</span>
+                <span>arXiv:{result.arxiv_id}</span>
               </div>
 
               {detail ? (
-                <div className="result-abstract" onClick={() => toggleAbstract(result.arxiv_id)}>
-                  <div className="result-authors">
-                    {detail.authors.slice(0, 5).join(', ')}
-                    {detail.authors.length > 5 && ' et al.'}
-                  </div>
-                  <p className={`abstract-text${expandedAbstracts.has(result.arxiv_id) ? ' expanded' : ''}`}>
+                <>
+                  <p
+                    className={`abstract-text${expanded ? ' expanded' : ''}`}
+                    onClick={() => {
+                      if (window.getSelection()?.toString()) return
+                      toggleAbstract(result.arxiv_id)
+                    }}
+                  >
                     {detail.abstract}
                   </p>
-                  <span className="published-date">
-                    {new Date(detail.published).toLocaleDateString('en-US', { year: 'numeric', month: 'short' })}
-                  </span>
-                </div>
+                  <button className="abstract-toggle-btn" onClick={() => toggleAbstract(result.arxiv_id)}>
+                    {expanded ? 'Show less' : 'Show more'}
+                  </button>
+                </>
               ) : detailsLoading ? (
-                <div className="abstract-loading">Loading abstract…</div>
+                <div className="abstract-skeleton">
+                  <div className="abstract-skeleton-line" style={{ width: '40%' }} />
+                  <div className="abstract-skeleton-line" style={{ width: '100%' }} />
+                  <div className="abstract-skeleton-line" style={{ width: '100%' }} />
+                  <div className="abstract-skeleton-line" style={{ width: '60%' }} />
+                </div>
+              ) : detailsFailed ? (
+                <div className="abstract-unavailable">
+                  Abstract unavailable —{' '}
+                  <a href={`https://arxiv.org/abs/${result.arxiv_id}`} target="_blank" rel="noopener noreferrer">
+                    view on arXiv
+                  </a>
+                </div>
               ) : null}
 
               <div className="result-actions">
                 <button
-                  className="find-similar-btn"
+                  className="btn-sm"
                   onClick={() => onFindSimilar(result.idx, result.title)}
                 >
                   Find Similar
                 </button>
                 {detail && (
                   <button
-                    className="bibtex-btn"
+                    className="btn-sm"
                     onClick={() => copyBibtex(result.arxiv_id, result.title)}
                   >
                     {copiedBibtex === result.arxiv_id ? 'Copied!' : 'Copy BibTeX'}

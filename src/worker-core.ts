@@ -502,7 +502,7 @@ export function createSearchWorker(config: ModelConfig): void {
             }))
             results.sort((a, b) => b.score - a.score)
             for (let i = 0; i < results.length; i++) results[i].rank = i + 1
-            self.postMessage({ type: 'results', payload: results.slice(0, topK), requestId })
+            self.postMessage({ type: 'results', payload: results.slice(0, topK), reranked: true, requestId })
           } else {
             const results = topCandidates.slice(0, topK).map((c, i) => ({
               rank: i + 1,
@@ -513,7 +513,7 @@ export function createSearchWorker(config: ModelConfig): void {
               score: -c.dist,
               hammingDist: c.dist,
             }))
-            self.postMessage({ type: 'results', payload: results, requestId })
+            self.postMessage({ type: 'results', payload: results, reranked: false, requestId })
           }
           break
         }
@@ -579,7 +579,7 @@ export function createSearchWorker(config: ModelConfig): void {
             }))
             results.sort((a, b) => b.score - a.score)
             for (let i = 0; i < results.length; i++) results[i].rank = i + 1
-            self.postMessage({ type: 'results', payload: results.slice(0, topK), requestId })
+            self.postMessage({ type: 'results', payload: results.slice(0, topK), reranked: true, requestId })
           }
           break
         }
