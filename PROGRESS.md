@@ -117,6 +117,37 @@ rows) — judged lower value than everything above for the time it'd take;
 same for search-history keyboard navigation and a couple of minor
 width-jitter nitpicks Opus itself flagged as skippable if short on time.
 
+### Test suite (new — the project had zero tests before this)
+
+Vitest + React Testing Library, sharing `vite.config.ts` rather than a
+separate config file. 48 tests, all passing, `npm test` to run them.
+
+- Extracted `hammingDistance`/`toUBinary`/`yearFromArxivId`/
+  `passesFilters` out of `worker-core.ts` into a new
+  `src/lib/binary-search-utils.ts` so they're actually importable in a
+  test environment (worker-core.ts imports `@huggingface/transformers`
+  and references `self.location` at module scope — importing anything
+  from it would run all of that). Behavior unchanged, confirmed via
+  identical build output bundle sizes.
+- Unit tests for that module, `categories.ts`, and the `searchStore`
+  actions most worth protecting (`addToHistory`'s dedup/cap, the
+  `resultsReranked` flag, and specifically the `similarSeedIdx`/
+  back-stack mechanics added earlier this session — `goBack` restoring
+  the right seed idx, not just the title).
+- One component regression test for the keyboard-accessibility bug
+  fixed in the accessibility pass above (Tab reaching the history
+  dropdown with it staying open, Enter activating it).
+- **Infrastructure note for later sessions**: jsdom's latest major
+  needs Node 22+; pinned to `jsdom@25.0.1` (last major supporting
+  Node >=18) specifically so `npm test` keeps working on this
+  project's Node 20 without requiring a version switch the way
+  `wrangler` does. Verified passing under both Node 20.19.6 and 24.18.0.
+- **Not covered**: the actual worker search/index-loading logic (would
+  need mocking transformers.js and Worker globals), the two Cloudflare
+  Functions (Workers runtime, not jsdom), IndexedDB-backed code (needs
+  a fake-indexeddb dependency). Scoped to what didn't need new test
+  infrastructure investment beyond Vitest itself.
+
 ### Earlier in this same session: a deployment-wiring gap found
 
 **Found while trying to verify via a Cloudflare Pages preview deploy:**
@@ -346,8 +377,12 @@ visually confirmed at a narrow width. Worth a real check (actual device,
 or a working resize) before fully trusting mobile layout.
 
 **Next:** review `git log main..dev --stat` and merge to `main` when
-ready — nothing pushed or merged automatically. After merging/deploying,
-worth specifically re-checking hf-proxy's edge caching against the real
-`*.pages.dev` Cache API. If picking up multi-source search next, start
-from the design above. A `.env.local` with the R2 data URL now exists
-locally (gitignored) for future sessions to use directly.
+ready — `dev` IS pushed to `origin` now (this session's authorization),
+but nothing has been merged to `main` automatically, and `main` itself
+hasn't been touched. After merging/deploying, worth specifically
+re-checking hf-proxy's edge caching against the real `*.pages.dev` Cache
+API, and resolving the deployment-wiring gap above. The single highest-
+priority item left from the user's original 5-hour plan is **multi-source
+search** (deliberately deferred — see reasoning above); the design for it
+is in the "## 2026-10-07" entry below. A `.env.local` with the R2 data URL
+now exists locally (gitignored) for future sessions to use directly.
