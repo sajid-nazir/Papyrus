@@ -27,9 +27,11 @@ interface SearchState {
   similarQuery: string | null
   similarSeedIdx: number | null
   isReranking: boolean
+  resultsReranked: boolean
   similarStack: Array<{ title: string | null; seedIdx: number | null; results: SearchResult[] }>
   paperDetails: Record<string, PaperDetail>
   detailsLoading: boolean
+  detailsFailed: boolean
   graph: GraphData | null
   graphOpen: boolean
 
@@ -44,7 +46,7 @@ interface SearchState {
   setModelsLoaded: () => void
   setRerankerReady: () => void
   setQuery: (query: string) => void
-  setResults: (results: SearchResult[]) => void
+  setResults: (results: SearchResult[], reranked: boolean) => void
   addToHistory: (query: string) => void
   setFilters: (filters: FilterState) => void
   setAvailableCategories: (cats: CategorySummary[]) => void
@@ -55,6 +57,7 @@ interface SearchState {
   setIsReranking: (v: boolean) => void
   setPaperDetails: (details: Record<string, PaperDetail>) => void
   setDetailsLoading: (v: boolean) => void
+  setDetailsFailed: (v: boolean) => void
   setGraph: (graph: GraphData | null) => void
   setGraphOpen: (open: boolean) => void
   reset: () => void
@@ -79,9 +82,11 @@ const initialState = {
   similarQuery: null,
   similarSeedIdx: null as number | null,
   isReranking: false,
+  resultsReranked: false,
   similarStack: [] as Array<{ title: string | null; seedIdx: number | null; results: SearchResult[] }>,
   paperDetails: {},
   detailsLoading: false,
+  detailsFailed: false,
   graph: null as GraphData | null,
   graphOpen: false,
 }
@@ -153,11 +158,12 @@ export const useSearchStore = create<SearchState>()(
           state.query = query
         }),
 
-      setResults: (results) =>
+      setResults: (results, reranked) =>
         set((state) => {
           state.results = results
           state.resultQuery = state.query
           state.isReranking = false
+          state.resultsReranked = reranked
           if (!state.similarQuery) state.similarStack = []
           if (state.stage === 'searching') state.stage = 'ready'
           state.graph = null
@@ -225,6 +231,11 @@ export const useSearchStore = create<SearchState>()(
       setDetailsLoading: (v) =>
         set((state) => {
           state.detailsLoading = v
+        }),
+
+      setDetailsFailed: (v) =>
+        set((state) => {
+          state.detailsFailed = v
         }),
 
       setGraph: (graph) =>

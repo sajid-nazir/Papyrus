@@ -80,6 +80,7 @@ export function useMLWorker() {
     setRerankerReady,
     setPaperDetails,
     setDetailsLoading,
+    setDetailsFailed,
     setGraph,
     setGraphOpen,
   } = useSearchStore()
@@ -190,7 +191,7 @@ export function useMLWorker() {
         case 'similar-hamming': {
           const msgRequestId = (event.data as { requestId?: number }).requestId
           if (msgRequestId !== undefined && msgRequestId !== requestIdRef.current) break
-          setResults(payload as SearchResult[])
+          setResults(payload as SearchResult[], false)
           setIsReranking(true)
           break
         }
@@ -199,7 +200,8 @@ export function useMLWorker() {
           const msgRequestId = (event.data as { requestId?: number }).requestId
           if (msgRequestId !== undefined && msgRequestId !== requestIdRef.current) break
           const results = payload as SearchResult[]
-          setResults(results)
+          const reranked = (event.data as { reranked?: boolean }).reranked ?? false
+          setResults(results, reranked)
           setIsReranking(false)
 
           // Cancel any in-flight abstract fetch
@@ -210,6 +212,7 @@ export function useMLWorker() {
           const ids = results.slice(0, 10).map(r => r.arxiv_id)
           if (ids.length > 0) {
             setDetailsLoading(true)
+            setDetailsFailed(false)
             fetchArxivDetails(ids, controller.signal).then(detailsMap => {
               if (controller.signal.aborted) return
               const details: Record<string, PaperDetail> = {}
@@ -218,8 +221,12 @@ export function useMLWorker() {
               })
               setPaperDetails(details)
               setDetailsLoading(false)
+              if (detailsMap.size === 0) setDetailsFailed(true)
             }).catch((e) => {
-              if ((e as Error).name !== 'AbortError') setDetailsLoading(false)
+              if ((e as Error).name !== 'AbortError') {
+                setDetailsLoading(false)
+                setDetailsFailed(true)
+              }
             })
           }
 
@@ -247,7 +254,7 @@ export function useMLWorker() {
       abortControllerRef.current?.abort()
       worker.terminate()
     }
-  }, [setStage, setSubstep, setDevice, setError, updateProgress, setIndexLoaded, setModelsLoaded, setResults, addToHistory, setAvailableCategories, setIsReranking, setRerankerReady, setPaperDetails, setDetailsLoading, setGraph, setGraphOpen])
+  }, [setStage, setSubstep, setDevice, setError, updateProgress, setIndexLoaded, setModelsLoaded, setResults, addToHistory, setAvailableCategories, setIsReranking, setRerankerReady, setPaperDetails, setDetailsLoading, setDetailsFailed, setGraph, setGraphOpen])
 
   const search = useCallback(
     (query: string, topK = 10, candidates = 300) => {
