@@ -7,7 +7,46 @@ Read this first when resuming. Keep only the current/most-recent state — prune
 User gave a 5-hour open-ended plan for a second AFK stretch, prioritized:
 (1) broader visual/design pass, (2) multi-source search, (3) accessibility
 pass, (4) a test suite. Authorized pushing `dev` to remote this round
-(still no merge to `main` without them).
+(still no merge to `main` without them). Done in this order instead:
+design pass, accessibility pass, test suite — **multi-source search
+deliberately deferred**, out of order from the user's own list. Reasoning:
+it's the one item with a real user-facing tradeoff baked in (the opt-in
+toggle's default state and exact wording for "your query text will be
+sent to OpenAlex/Europe PMC" — a privacy-adjacent decision), which isn't
+something to guess at alone while the user isn't here to react to it. The
+design from the first AFK session's Opus consult is still below, ready to
+build from once that's confirmed.
+
+### Accessibility pass
+
+Found zero ARIA attributes anywhere in the app at the session's start.
+Fixed, verified with real keyboard-only interaction in a browser
+(Tab/Enter sequences, no mouse) plus the accessibility tree:
+
+- Search input had only a placeholder as its name (unreliable — vanishes
+  once typed). Added `aria-label` + combobox semantics.
+- **Found and fixed a real bug while testing this**: converting the
+  search-history dropdown's `<li onMouseDown>` items to real `<button>`s
+  wasn't enough on its own — the input's `onBlur` closed the dropdown via
+  a timeout on *any* blur, including Tabbing toward the dropdown itself,
+  so keyboard users still couldn't reach it. Fixed by moving the
+  close-on-blur logic to the container with an `e.relatedTarget` check
+  (only closes when focus leaves the whole search box). Confirmed: Tab →
+  Search button (dropdown stays open) → Tab → first history item
+  (focused) → Enter → runs that search.
+- `aria-pressed` on the category filter pills and the Graph toggle
+  (both are toggle buttons with no state previously exposed).
+- Year selects had no programmatic label — added `aria-label`.
+- `aria-live` regions so status is actually announced: errors
+  (`role="alert"`), loading stage text and the ready line
+  (`role="status"`), results count / reranking indicator.
+- The graph (canvas, no inherent accessible structure) labeled
+  `role="img"` noting it's a decorative shortcut — every interaction it
+  offers (click node → Find Similar) already exists as a real button on
+  the result cards below.
+- Caught and fixed a focus-visibility regression introduced in this same
+  pass — an early version of the history-button CSS had `outline: none`
+  on `:focus-visible` with nothing replacing it.
 
 **Pushed `dev`** — first time it's existed on GitHub (`origin/dev` now
 tracks it).
