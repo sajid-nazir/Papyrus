@@ -39,14 +39,15 @@ export function Filters() {
   }
 
   return (
-    <div className="filters-bar">
+    <div className="filters-bar" role="group" aria-label="Search filters">
       <div className="filters-section">
-        <span className="filters-label">Category</span>
-        <div className="category-pills">
+        <span className="filters-label" id="category-filter-label">Category</span>
+        <div className="category-pills" role="group" aria-labelledby="category-filter-label">
           {topCategories.map(({ category }) => (
             <button
               key={category}
               className={`category-pill${filters.categories.includes(category) ? ' active' : ''}`}
+              aria-pressed={filters.categories.includes(category)}
               onClick={() => toggleCategory(category)}
             >
               {category}
@@ -56,9 +57,11 @@ export function Filters() {
       </div>
 
       <div className="filters-section year-range">
-        <span className="filters-label">Year</span>
+        <label className="filters-label" htmlFor="year-from-select">Year</label>
         <select
+          id="year-from-select"
           className="year-select"
+          aria-label="From year"
           value={filters.yearRange?.[0] ?? ''}
           onChange={(e) => setFromYear(e.target.value)}
         >
@@ -67,9 +70,11 @@ export function Filters() {
             <option key={y} value={y}>{y}</option>
           ))}
         </select>
-        <span className="filters-label">—</span>
+        <span className="filters-label" aria-hidden="true">—</span>
         <select
+          id="year-to-select"
           className="year-select"
+          aria-label="To year"
           value={filters.yearRange?.[1] ?? ''}
           onChange={(e) => setToYear(e.target.value)}
         >

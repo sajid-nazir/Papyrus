@@ -57,13 +57,17 @@ export function Results({ onFindSimilar, onBuildGraph }: ResultsProps) {
   }
 
   if (stage === 'searching' && results.length === 0) {
-    return <div className="results-container"><div className="loading-spinner" /></div>
+    return (
+      <div className="results-container">
+        <div className="loading-spinner" role="status" aria-label="Searching" />
+      </div>
+    )
   }
 
   if (stage === 'ready' && results.length === 0 && resultQuery) {
     const hasActiveFilters = filters.categories.length > 0 || filters.yearRange !== null
     return (
-      <div className="results-empty">
+      <div className="results-empty" role="status">
         {hasActiveFilters ? (
           <>
             No papers matched your filters.{' '}
@@ -91,11 +95,11 @@ export function Results({ onFindSimilar, onBuildGraph }: ResultsProps) {
         ) : (
           <h2 className="results-title">"{resultQuery}"</h2>
         )}
-        <span className="results-meta">
+        <span className="results-meta" role="status" aria-live="polite">
           {isReranking ? 'Reranking…' : `${results.length} papers`}
         </span>
         <div className="actions-right">
-          <button className="btn-sm" onClick={toggleGraph}>
+          <button className="btn-sm" onClick={toggleGraph} aria-pressed={graphOpen}>
             {graphOpen ? 'Hide Graph' : 'Graph'}
           </button>
           <button className="btn-sm" onClick={copyLink}>
@@ -105,7 +109,7 @@ export function Results({ onFindSimilar, onBuildGraph }: ResultsProps) {
       </div>
 
       {!resultsReranked && results.length > 0 && (
-        <div className="reranker-banner">
+        <div className="reranker-banner" role="status">
           Fast results — refined ranking still loading. Search again in a moment for better ordering.
         </div>
       )}

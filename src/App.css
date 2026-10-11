@@ -117,8 +117,20 @@ header h1 {
   z-index: 10;
 }
 
-.search-history li { padding: 8px 12px; cursor: pointer; }
-.search-history li:hover { background: var(--border-light); }
+.search-history li { padding: 0; }
+.search-history button {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: none;
+  text-align: left;
+  font-size: inherit;
+  color: var(--text);
+  cursor: pointer;
+}
+.search-history button:hover { background: var(--border-light); }
+.search-history button:focus-visible { background: var(--border-light); outline: 2px solid var(--text-muted); outline-offset: -2px; }
 
 /* Filters */
 .filters-bar {
