@@ -2,11 +2,83 @@
 
 Read this first when resuming. Keep only the current/most-recent state — prune stale entries, don't accumulate a full history (git log is the history).
 
-## 2026-10-08 — second AFK session: pushed dev, found a deployment-wiring gap
+## 2026-10-08 — second AFK session: pushed dev, design passes, planned 5hr work
 
-User authorized pushing `dev` to remote this round (still no merge to `main`
-without them). Pushed — first time `dev` has existed on GitHub
-(`origin/dev` now tracks it).
+User gave a 5-hour open-ended plan for a second AFK stretch, prioritized:
+(1) broader visual/design pass, (2) multi-source search, (3) accessibility
+pass, (4) a test suite. Authorized pushing `dev` to remote this round
+(still no merge to `main` without them).
+
+**Pushed `dev`** — first time it's existed on GitHub (`origin/dev` now
+tracks it).
+
+### Design pass part 2: rest of the UI (consulted Opus again)
+
+Scope: everything except the graph (already done the prior session).
+Opus read SearchBox/Filters/Progress/Results/App.css/App.tsx and found
+real functional bugs, not just cosmetics — all fixed, verified extensively
+in a real browser including forced dark mode, zero console errors
+throughout both commits:
+
+- **`color-scheme` was never declared** — native controls (select popups,
+  scrollbars, autofill) stayed light-themed in dark mode. Same bug class
+  as the graph's hard-coded label color from the prior session.
+- **Year filter bug**: picking the empty "From"/"To" placeholder again set
+  that end to `Number('') === 0` instead of clearing it, silently
+  corrupting the range to `[0, currentYear]`.
+- **Filters didn't actually do anything live** — toggling a category pill
+  or year after results were showing silently did nothing until the next
+  manual search. Added a 250ms-debounced re-run in `App.tsx`. Doing this
+  for the "similar to" view needed the seed idx, which wasn't tracked
+  anywhere (only the title was) — added `similarSeedIdx` to the store, and
+  gave `findSimilar` a `{ refresh: true }` option so re-running it on a
+  filter change doesn't push a duplicate entry onto the back-navigation
+  stack the way a real forward navigation does. **Verified this
+  specifically**: toggled a filter mid "similar to" view, confirmed Back
+  still returned in one click afterward (stack wasn't corrupted).
+- **Removed the raw score number from result cards** — it was debug
+  output with three different, unrelated meanings depending on search
+  state (negative Hamming distance / hardcoded 0 / raw cross-encoder
+  logit), none meaningful to an end user.
+- **Reranker banner showed stale state** — it hid itself as soon as the
+  reranker became ready globally, even for results that were actually the
+  pre-rerank hamming ones, implying an improvement that hadn't happened.
+  Added a `reranked` flag to the worker's own `results` message so the
+  banner reflects whether *these* results were reranked.
+- Reordered result cards (title → authors → meta → abstract → actions,
+  previously authors was separated from the title by the meta line and a
+  divider); fixed abstract expand/collapse toggling when selecting text to
+  copy it; added a loading skeleton and a "view on arXiv" fallback for a
+  failed/empty abstract fetch (previously silent); fixed a long search
+  query getting squeezed into ellipsis in the header while sitting
+  unconstrained elsewhere; distinguished "no results due to filters" (now
+  offers an inline Reset) from "no results for this query."
+- Consolidated duplicated small-button CSS (Graph/Copy Link/Retry/Clear
+  cache/Find Similar/Copy BibTeX/graph Reset all had separate identical
+  rules) into one `.btn-sm`, and fixed Retry floating mid-row in the error
+  state (two buttons both had `margin-left: auto`, splitting the free
+  space between them).
+- Category palette: three colors (math/eess/fin) were near-identical
+  browns, two were under 3:1 contrast against the dark background.
+  Replaced with a set at ~3.5-4.8:1 against both themes, and made
+  `categories.ts` the actual single source of truth for card border colors
+  (previously also duplicated as 8 CSS rules that could drift, per that
+  file's own "keep in sync" comment).
+- Smaller fixes: the memory-warning banner's hard-coded "~300 MB" (now
+  computed from the real per-model sizes) and missing dark-mode styling;
+  a dead `'loading-reranker'` stage-label entry that could never render;
+  blank idle-stage page before the worker's first message; progress bars
+  now skip sub-1MB entries and show a percentage; "Reset" (a harmless
+  filter action) no longer colored like an error, freeing `--error` to
+  mean only actual errors.
+
+**Deliberately not done**: the full loading-progress hierarchy rework
+Opus also suggested (step-numbered stage labels, per-file progress
+rows) — judged lower value than everything above for the time it'd take;
+same for search-history keyboard navigation and a couple of minor
+width-jitter nitpicks Opus itself flagged as skippable if short on time.
+
+### Earlier in this same session: a deployment-wiring gap found
 
 **Found while trying to verify via a Cloudflare Pages preview deploy:**
 the Papyrus Pages project isn't visible anywhere in the
