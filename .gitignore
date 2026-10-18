@@ -9,6 +9,7 @@ PROGRESS.local.md
 .vscode/*
 !.vscode/extensions.json
 .idea/
+.claude/
 
 # OS
 .DS_Store
