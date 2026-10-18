@@ -25,4 +25,11 @@ React 19 · TypeScript · Vite · Transformers.js · Sigma.js (graph viz) · Zus
 
 ## Workflow
 - Day-to-day feature work happens on a `dev` branch, merged to `main` when ready — not direct commits to `main`.
-- See `PROGRESS.md` for current in-flight state (updated each session — read it first when resuming work).
+- This repo is **public**. See `PROGRESS.local.md` for current in-flight state
+  (read it first when resuming work) — it is gitignored and must stay that
+  way. An earlier session committed this as `PROGRESS.md` (tracked, pushed)
+  without checking repo visibility first; it ended up containing an email
+  address and an internal account-access narrative on a public repo, which
+  required a `git filter-repo` history rewrite + force-push to remove. Do
+  not recreate a tracked `PROGRESS.md` — if `PROGRESS.local.md` doesn't
+  exist, create it with that exact name (already gitignored) instead.
