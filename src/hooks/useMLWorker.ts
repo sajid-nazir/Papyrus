@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'react'
 import { useSearchStore } from '../stores/searchStore'
 import type { LoadingProgress, SearchResult, DeviceType, Stage, Substep, CategorySummary, PaperDetail, GraphData } from '../types'
 import { fetchArxivDetails } from '../lib/arxiv-api'
+import { searchEuropePmc } from '../lib/europepmc-api'
 
 import MxbaiWorker from '../worker?worker'
 import NomicWorker from '../worker-nomic?worker'
@@ -63,6 +64,7 @@ export function useMLWorker() {
   // results to be silently dropped as "stale".
   const graphRequestIdRef = useRef(0)
   const abortControllerRef = useRef<AbortController | null>(null)
+  const externalAbortControllerRef = useRef<AbortController | null>(null)
 
   const {
     setStage,
@@ -252,6 +254,7 @@ export function useMLWorker() {
 
     return () => {
       abortControllerRef.current?.abort()
+      externalAbortControllerRef.current?.abort()
       worker.terminate()
     }
   }, [setStage, setSubstep, setDevice, setError, updateProgress, setIndexLoaded, setModelsLoaded, setResults, addToHistory, setAvailableCategories, setIsReranking, setRerankerReady, setPaperDetails, setDetailsLoading, setDetailsFailed, setGraph, setGraphOpen])
@@ -260,7 +263,7 @@ export function useMLWorker() {
     (query: string, topK = 10, candidates = 300) => {
       if (!workerRef.current || !readyRef.current) return
       requestIdRef.current += 1
-      const { filters } = useSearchStore.getState()
+      const { filters, externalSearchEnabled } = useSearchStore.getState()
       useSearchStore.getState().setError(null)
       useSearchStore.getState().clearSimilarHistory()
       addToHistory(query)
@@ -272,6 +275,31 @@ export function useMLWorker() {
         type: 'search',
         payload: { query, topK, candidates, filters, requestId: requestIdRef.current },
       })
+
+      // Runs independently of the worker's arXiv search — Europe PMC is a
+      // plain fetch from the main thread, not something the worker handles.
+      // Cleared here (once, up front) rather than in setResults, since the
+      // worker sends two results messages per query (fast unreranked, then
+      // reranked) — clearing on every setResults call could wipe a Europe
+      // PMC response that arrived in the gap between those two messages.
+      externalAbortControllerRef.current?.abort()
+      useSearchStore.getState().setExternalResults([])
+      if (externalSearchEnabled) {
+        const controller = new AbortController()
+        externalAbortControllerRef.current = controller
+        useSearchStore.getState().setExternalSearchLoading(true)
+        searchEuropePmc(query, 10, controller.signal)
+          .then(results => {
+            if (controller.signal.aborted) return
+            useSearchStore.getState().setExternalResults(results)
+          })
+          .catch((e) => {
+            if ((e as Error).name !== 'AbortError') {
+              console.warn('[europepmc] search failed:', e)
+              useSearchStore.getState().setExternalResults([])
+            }
+          })
+      }
     },
     [addToHistory, setStage]
   )
@@ -287,6 +315,11 @@ export function useMLWorker() {
       useSearchStore.getState().setError(null)
       if (!options?.refresh) setSimilarQuery(title, idx)
       setStage('searching')
+      // Find-similar is a different view from the keyword search that
+      // produced any current external results — drop them rather than
+      // showing Europe PMC hits for an unrelated query.
+      externalAbortControllerRef.current?.abort()
+      useSearchStore.getState().setExternalResults([])
       workerRef.current.postMessage({
         type: 'find-similar',
         payload: { idx, topK: 10, candidates: 300, filters, requestId: requestIdRef.current },

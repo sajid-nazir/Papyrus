@@ -4,7 +4,10 @@ const CURRENT_YEAR = new Date().getFullYear()
 const YEARS = Array.from({ length: CURRENT_YEAR - 1990 }, (_, i) => CURRENT_YEAR - i)
 
 export function Filters() {
-  const { filters, availableCategories, setFilters, resetFilters } = useSearchStore()
+  const {
+    filters, availableCategories, setFilters, resetFilters,
+    externalSearchEnabled, setExternalSearchEnabled,
+  } = useSearchStore()
 
   if (availableCategories.length === 0) return null
 
@@ -83,6 +86,20 @@ export function Filters() {
             <option key={y} value={y}>{y}</option>
           ))}
         </select>
+      </div>
+
+      <div className="filters-section external-search-toggle">
+        <label className="external-search-label">
+          <input
+            type="checkbox"
+            checked={externalSearchEnabled}
+            onChange={(e) => setExternalSearchEnabled(e.target.checked)}
+          />
+          Also search Europe PMC
+        </label>
+        {externalSearchEnabled && (
+          <span className="filters-label">— your search text is sent to europepmc.org when this is on</span>
+        )}
       </div>
 
       {hasActiveFilters && (

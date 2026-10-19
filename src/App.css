@@ -215,6 +215,10 @@ header h1 {
 .filters-reset { font-size: 0.75rem; background: none; border: none; color: var(--text-muted); cursor: pointer; margin-left: auto; }
 .filters-reset:hover { color: var(--text); text-decoration: underline; }
 
+.external-search-toggle { gap: 8px; }
+.external-search-label { display: flex; align-items: center; gap: 6px; font-size: 0.75rem; color: var(--text); cursor: pointer; }
+.external-search-label input { cursor: pointer; }
+
 /* Progress */
 .progress { margin-bottom: 16px; font-size: 0.875rem; color: var(--text-muted); }
 .progress-ready { margin-bottom: 12px; font-size: 0.875rem; color: var(--text-muted); display: flex; align-items: center; gap: 8px; }
@@ -263,6 +267,10 @@ header h1 {
   border-left: 3px solid; /* color set inline per-result via catColor() */
   padding-left: 10px;
 }
+
+.external-results { margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--border); }
+.external-results-title { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin: 0 0 8px; text-transform: uppercase; letter-spacing: 0.03em; }
+.external-result-card { border-left-color: var(--border); }
 
 /* Graph view */
 .graph-view { margin-bottom: 16px; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }

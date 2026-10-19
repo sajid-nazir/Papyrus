@@ -90,3 +90,18 @@ export interface GraphData {
   nodes: GraphNode[]
   edges: GraphEdge[]
 }
+
+// A result from an external source (currently just Europe PMC) — distinct
+// from SearchResult because it has no index position, so it can't be a
+// Find Similar / graph seed the way an arXiv result can.
+export interface ExternalResult {
+  source: 'europepmc'
+  id: string
+  title: string
+  authors: string[]
+  abstract: string
+  journal: string | null
+  year: number | null
+  url: string
+  doi: string | null
+}

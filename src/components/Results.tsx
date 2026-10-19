@@ -1,8 +1,13 @@
 import { lazy, Suspense, useState } from 'react'
 import { useSearchStore } from '../stores/searchStore'
 import { catColor } from '../lib/categories'
+import type { ExternalResult } from '../types'
 
 const GraphView = lazy(() => import('./GraphView').then(m => ({ default: m.GraphView })))
+
+function normalizeTitle(title: string): string {
+  return title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+}
 
 interface ResultsProps {
   onFindSimilar: (idx: number, title: string) => void
@@ -15,6 +20,7 @@ export function Results({ onFindSimilar, onBuildGraph }: ResultsProps) {
     isReranking, resultsReranked, paperDetails, detailsLoading, detailsFailed,
     filters, resetFilters,
     graph, graphOpen, setGraphOpen,
+    externalSearchEnabled, externalResults, externalSearchLoading,
   } = useSearchStore()
   const [copied, setCopied] = useState(false)
   const [copiedBibtex, setCopiedBibtex] = useState<string | null>(null)
@@ -55,6 +61,23 @@ export function Results({ onFindSimilar, onBuildGraph }: ResultsProps) {
     setCopiedBibtex(arxivId)
     setTimeout(() => setCopiedBibtex(null), 2000)
   }
+
+  function copyBibtexExternal(result: ExternalResult) {
+    const firstAuthor = result.authors[0]?.split(' ').pop() ?? 'unknown'
+    const year = result.year ?? new Date().getFullYear()
+    const key = `${firstAuthor}${year}${result.id.replace(/[^a-zA-Z0-9]/g, '')}`
+    const bibtex = result.doi
+      ? `@article{${key},\n  title={${result.title}},\n  author={${result.authors.join(' and ')}},\n  journal={${result.journal ?? 'Europe PMC'}},\n  year={${year}},\n  doi={${result.doi}}\n}`
+      : `@article{${key},\n  title={${result.title}},\n  author={${result.authors.join(' and ')}},\n  journal={${result.journal ?? 'Europe PMC'}},\n  year={${year}}\n}`
+    navigator.clipboard.writeText(bibtex)
+    setCopiedBibtex(result.id)
+    setTimeout(() => setCopiedBibtex(null), 2000)
+  }
+
+  // Many preprints are cross-indexed in both arXiv and Europe PMC — drop
+  // anything that's clearly the same paper we're already showing.
+  const arxivTitles = new Set(results.map(r => normalizeTitle(r.title)))
+  const dedupedExternalResults = externalResults.filter(r => !arxivTitles.has(normalizeTitle(r.title)))
 
   if (stage === 'searching' && results.length === 0) {
     return (
@@ -209,6 +232,64 @@ export function Results({ onFindSimilar, onBuildGraph }: ResultsProps) {
           </div>
         )
       })}
+
+      {externalSearchEnabled && (externalSearchLoading || dedupedExternalResults.length > 0) && (
+        <div className="external-results">
+          <h3 className="external-results-title">Other sources</h3>
+          {externalSearchLoading && dedupedExternalResults.length === 0 ? (
+            <div className="abstract-loading" role="status">Searching Europe PMC…</div>
+          ) : (
+            dedupedExternalResults.map((result) => {
+              const expanded = expandedAbstracts.has(result.id)
+              return (
+                <div key={result.id} className="result-card external-result-card">
+                  <div className="result-content">
+                    <a href={result.url} target="_blank" rel="noopener noreferrer" className="title">
+                      {result.title}
+                    </a>
+
+                    {result.authors.length > 0 && (
+                      <div className="result-authors">
+                        {result.authors.slice(0, 5).join(', ')}
+                        {result.authors.length > 5 && ' et al.'}
+                      </div>
+                    )}
+
+                    <div className="meta">
+                      {result.year && <span>{result.year}</span>}
+                      {result.journal && <span>{result.journal}</span>}
+                      <span>Europe PMC</span>
+                    </div>
+
+                    {result.abstract && (
+                      <>
+                        <p
+                          className={`abstract-text${expanded ? ' expanded' : ''}`}
+                          onClick={() => {
+                            if (window.getSelection()?.toString()) return
+                            toggleAbstract(result.id)
+                          }}
+                        >
+                          {result.abstract}
+                        </p>
+                        <button className="abstract-toggle-btn" onClick={() => toggleAbstract(result.id)}>
+                          {expanded ? 'Show less' : 'Show more'}
+                        </button>
+                      </>
+                    )}
+
+                    <div className="result-actions">
+                      <button className="btn-sm" onClick={() => copyBibtexExternal(result)}>
+                        {copiedBibtex === result.id ? 'Copied!' : 'Copy BibTeX'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )
+            })
+          )}
+        </div>
+      )}
     </div>
   )
 }

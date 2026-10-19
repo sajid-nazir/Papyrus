@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { immer } from 'zustand/middleware/immer'
-import type { Stage, Substep, LoadingProgress, SearchResult, DeviceType, FilterState, CategorySummary, PaperDetail, GraphData } from '../types'
+import type { Stage, Substep, LoadingProgress, SearchResult, DeviceType, FilterState, CategorySummary, PaperDetail, GraphData, ExternalResult } from '../types'
 
 interface SearchState {
   // Loading state
@@ -35,6 +35,12 @@ interface SearchState {
   graph: GraphData | null
   graphOpen: boolean
 
+  // External (Europe PMC) search — opt-in since, unlike arXiv, the raw
+  // query text leaves the device when this is on.
+  externalSearchEnabled: boolean
+  externalResults: ExternalResult[]
+  externalSearchLoading: boolean
+
   // Actions
   setStage: (stage: Stage) => void
   setSubstep: (substep: Substep) => void
@@ -60,6 +66,9 @@ interface SearchState {
   setDetailsFailed: (v: boolean) => void
   setGraph: (graph: GraphData | null) => void
   setGraphOpen: (open: boolean) => void
+  setExternalSearchEnabled: (v: boolean) => void
+  setExternalResults: (results: ExternalResult[]) => void
+  setExternalSearchLoading: (v: boolean) => void
   reset: () => void
 }
 
@@ -89,6 +98,9 @@ const initialState = {
   detailsFailed: false,
   graph: null as GraphData | null,
   graphOpen: false,
+  externalSearchEnabled: false,
+  externalResults: [] as ExternalResult[],
+  externalSearchLoading: false,
 }
 
 export const useSearchStore = create<SearchState>()(
@@ -248,6 +260,22 @@ export const useSearchStore = create<SearchState>()(
           state.graphOpen = open
         }),
 
+      setExternalSearchEnabled: (v) =>
+        set((state) => {
+          state.externalSearchEnabled = v
+        }),
+
+      setExternalResults: (results) =>
+        set((state) => {
+          state.externalResults = results
+          state.externalSearchLoading = false
+        }),
+
+      setExternalSearchLoading: (v) =>
+        set((state) => {
+          state.externalSearchLoading = v
+        }),
+
       reset: () => set(() => initialState),
     })),
     {
@@ -255,6 +283,7 @@ export const useSearchStore = create<SearchState>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         searchHistory: state.searchHistory,
+        externalSearchEnabled: state.externalSearchEnabled,
       }),
     }
   )
