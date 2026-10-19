@@ -2,25 +2,25 @@
 
 **[papyrus-5m1.pages.dev](https://papyrus-5m1.pages.dev)**
 
-In-browser academic paper search engine with semantic search and a knowledge graph visualization of results, searching arXiv today — multi-source support (OpenAlex, Europe PMC) is planned.
+In-browser academic paper search engine with semantic search and a knowledge graph visualization of results, searching arXiv locally with optional Europe PMC results alongside it.
 
 ## What's working
 
 - Search 1M+ arXiv papers entirely in the browser — no backend
 - Semantic search via binary quantized embeddings and cross-encoder reranking
+- Optional Europe PMC search (opt-in, since it sends your query to europepmc.org)
 - Filter results by category and year
 - Find similar papers by embedding distance
 - Paper abstracts, authors, and publication dates fetched on demand
 - BibTeX citation export and shareable search URLs
 - Offline support via IndexedDB caching and service worker
 - WebGPU acceleration with automatic WASM fallback
-- Dark mode
+- Dark/light mode, auto-detected with a manual toggle
 - Similarity graph of search results (Sigma.js) — embedding-distance map, not citations
 - Keyboard-navigable, with ARIA labels and live-region status updates
 
 ## What's coming
 
-- Multi-source search (OpenAlex, Europe PMC)
 - Citation-graph edges, once a citation data source is wired up
 
 ## Stack
