@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useMLWorker } from './hooks/useMLWorker'
 import { useSearchStore } from './stores/searchStore'
+import { useTheme } from './hooks/useTheme'
 import { SearchBox } from './components/SearchBox'
 import { Filters } from './components/Filters'
 import { Progress } from './components/Progress'
@@ -11,6 +12,7 @@ import './App.css'
 function App() {
   const { search, findSimilar, buildGraph } = useMLWorker()
   const filters = useSearchStore(s => s.filters)
+  const { theme, toggleTheme } = useTheme()
   const [lowMemory, setLowMemory] = useState(() => {
     const mem = (navigator as unknown as { deviceMemory?: number }).deviceMemory
     return mem !== undefined && mem <= 2
@@ -36,6 +38,14 @@ function App() {
 
   return (
     <div className="app">
+      <button
+        className="theme-toggle-btn"
+        onClick={toggleTheme}
+        aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+        title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+      >
+        {theme === 'dark' ? '☀' : '☾'}
+      </button>
       {lowMemory && (
         <div className="memory-warning">
           This app loads ~{totalDownloadMB()} MB of data and ML models. Performance may be limited on this device.
