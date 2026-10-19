@@ -2,7 +2,7 @@
 
 **[papyrus-5m1.pages.dev](https://papyrus-5m1.pages.dev)**
 
-In-browser academic paper search engine with semantic search, knowledge graph visualization, and multi-source support (arXiv, OpenAlex, Europe PMC).
+In-browser academic paper search engine with semantic search and a knowledge graph visualization of results, searching arXiv today — multi-source support (OpenAlex, Europe PMC) is planned.
 
 ## What's working
 
@@ -16,6 +16,7 @@ In-browser academic paper search engine with semantic search, knowledge graph vi
 - WebGPU acceleration with automatic WASM fallback
 - Dark mode
 - Similarity graph of search results (Sigma.js) — embedding-distance map, not citations
+- Keyboard-navigable, with ARIA labels and live-region status updates
 
 ## What's coming
 
