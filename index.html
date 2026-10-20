@@ -2,6 +2,19 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- Sets data-theme before first paint so a stored theme choice doesn't
+         flash the wrong colors first — must run before any stylesheet.
+         Keep this in sync with STORAGE_KEY in src/hooks/useTheme.ts. -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('papyrus-theme')
+          if (t === 'light' || t === 'dark') {
+            document.documentElement.setAttribute('data-theme', t)
+          }
+        } catch (e) {}
+      })()
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Papyrus</title>
     <meta name="description" content="In-browser academic paper search engine with semantic search, knowledge graph visualization, and multi-source support." />

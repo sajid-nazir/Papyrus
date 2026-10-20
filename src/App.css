@@ -59,6 +59,18 @@ body {
   color: var(--text);
 }
 
+/* Applied to <html> only for the ~800ms around an explicit theme toggle
+   (see useTheme.ts) — crossfades every element's colors instead of an
+   instant swap. Not left on permanently: that would make unrelated
+   hover/scroll-triggered color changes animate too. Never applied on
+   initial load (system/stored theme), only on a user-triggered toggle. */
+.theme-transitioning,
+.theme-transitioning *,
+.theme-transitioning *::before,
+.theme-transitioning *::after {
+  transition: background-color 0.8s ease, color 0.8s ease, border-color 0.8s ease !important;
+}
+
 .memory-warning {
   display: flex;
   align-items: center;
@@ -84,13 +96,14 @@ body {
 }
 
 .app {
+  position: relative;
   max-width: 720px;
   margin: 0 auto;
   padding: 24px 16px;
 }
 
 .theme-toggle-btn {
-  position: fixed;
+  position: absolute;
   top: 16px;
   right: 16px;
   width: 32px;

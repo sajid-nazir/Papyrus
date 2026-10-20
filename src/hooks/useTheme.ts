@@ -1,8 +1,10 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 
 type Theme = 'light' | 'dark'
 
 const STORAGE_KEY = 'papyrus-theme'
+// Matches the transition duration in the .theme-transitioning rule in App.css.
+const TRANSITION_MS = 800
 
 function getSystemTheme(): Theme {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
@@ -19,6 +21,13 @@ function getStoredTheme(): Theme | null {
 // see the :root[data-theme] rules in App.css.
 export function useTheme() {
   const [theme, setThemeState] = useState<Theme>(() => getStoredTheme() ?? getSystemTheme())
+  const transitionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (transitionTimeoutRef.current) clearTimeout(transitionTimeoutRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     const stored = getStoredTheme()
@@ -38,6 +47,14 @@ export function useTheme() {
   }, [])
 
   const toggleTheme = useCallback(() => {
+    const root = document.documentElement
+    if (transitionTimeoutRef.current) clearTimeout(transitionTimeoutRef.current)
+    root.classList.add('theme-transitioning')
+    transitionTimeoutRef.current = setTimeout(() => {
+      root.classList.remove('theme-transitioning')
+      transitionTimeoutRef.current = null
+    }, TRANSITION_MS)
+
     setThemeState(prev => {
       const next: Theme = prev === 'dark' ? 'light' : 'dark'
       localStorage.setItem(STORAGE_KEY, next)
