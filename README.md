@@ -10,7 +10,10 @@ In-browser academic paper search engine with semantic search and a knowledge gra
 - Semantic search via binary quantized embeddings and cross-encoder reranking
 - Optional Europe PMC search (opt-in, since it sends your query to europepmc.org)
 - Filter results by category and year
-- Find similar papers by embedding distance
+- Find similar papers by embedding distance, or combine several saved papers into one "more like these" search
+- Paste an arXiv id or link to jump straight to similar papers, instead of searching text
+- Page past the first 10 results — the full ranked pool is loaded, just not rendered all at once
+- Reading list: save papers across different searches, export the list as BibTeX, RIS, or CSV
 - Paper abstracts, authors, and publication dates fetched on demand
 - BibTeX citation export and shareable search URLs
 - Offline support via IndexedDB caching and service worker
