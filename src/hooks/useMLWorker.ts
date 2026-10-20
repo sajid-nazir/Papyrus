@@ -381,5 +381,29 @@ export function useMLWorker() {
     [addToHistory, setStage]
   )
 
-  return { search, findSimilar, findById, buildGraph }
+  // Searches from the combined embedding of several saved papers at once
+  // ("more like these") rather than one seed — only possible because the
+  // embeddings are local, there's no API that takes a set of papers as a
+  // query. idxs must be arXiv papers already in the local index (Europe
+  // PMC saves have no idx and can't seed this).
+  const findSimilarToSaved = useCallback(
+    (idxs: number[], label: string) => {
+      if (!workerRef.current || !readyRef.current || idxs.length === 0) return
+      requestIdRef.current += 1
+      const { filters } = useSearchStore.getState()
+      useSearchStore.getState().setError(null)
+      useSearchStore.getState().setIdNotFound(null)
+      useSearchStore.getState().setSimilarQuery(label, null)
+      setStage('searching')
+      externalAbortControllerRef.current?.abort()
+      useSearchStore.getState().setExternalResults([])
+      workerRef.current.postMessage({
+        type: 'find-similar-combined',
+        payload: { idxs, topK: RESULT_POOL_SIZE, candidates: RESULT_POOL_SIZE, filters, requestId: requestIdRef.current },
+      })
+    },
+    [setStage]
+  )
+
+  return { search, findSimilar, findById, findSimilarToSaved, buildGraph }
 }

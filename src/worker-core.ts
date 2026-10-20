@@ -294,6 +294,25 @@ async function fetchChunked(
   return { buffer, manifest }
 }
 
+// Combines several binary-quantized embeddings into one query vector for
+// "more like these" (find similar to a whole set of saved papers at once)
+// — a per-bit majority vote across the seed vectors, ties broken toward 0.
+function majorityVoteBinary(vectors: Uint8Array[], numBytes: number): Uint8Array {
+  const n = vectors.length
+  const result = new Uint8Array(numBytes)
+  for (let byteIdx = 0; byteIdx < numBytes; byteIdx++) {
+    for (let bit = 0; bit < 8; bit++) {
+      const mask = 1 << bit
+      let ones = 0
+      for (const v of vectors) {
+        if (v[byteIdx] & mask) ones++
+      }
+      if (ones * 2 > n) result[byteIdx] |= mask
+    }
+  }
+  return result
+}
+
 export function createSearchWorker(config: ModelConfig): void {
   let binaryIndex: Uint8Array | null = null
   let metadata: Metadata | null = null
@@ -578,6 +597,59 @@ export function createSearchWorker(config: ModelConfig): void {
           }
 
           await runFindSimilar(idx, topK, candidates, requestId, filters)
+          break
+        }
+
+        case 'find-similar-combined': {
+          if (!binaryIndex || !metadata) {
+            throw new Error('Index not loaded')
+          }
+
+          const { idxs, topK = 10, candidates = 300, requestId, filters } = payload as {
+            idxs: number[]
+            topK?: number
+            candidates?: number
+            requestId?: number
+            filters?: { categories: string[]; yearRange: [number, number] | null }
+          }
+
+          if (requestId !== undefined) currentRequestId = requestId
+          self.postMessage({ type: 'stage', payload: 'searching', requestId })
+
+          const bytesPerPaper = config.dimension / 8
+          const seedSet = new Set(idxs)
+          const seedVectors = idxs.map((i) => binaryIndex!.subarray(i * bytesPerPaper, (i + 1) * bytesPerPaper))
+          const combined = majorityVoteBinary(seedVectors, bytesPerPaper)
+
+          const numPapers = metadata.titles.length
+          const candidateResults: Array<{ idx: number; dist: number }> = []
+          for (let i = 0; i < numPapers; i++) {
+            if (seedSet.has(i)) continue
+            if (!passesFilters(metadata, i, filters)) continue
+            const paperBinary = binaryIndex.subarray(i * bytesPerPaper, (i + 1) * bytesPerPaper)
+            candidateResults.push({ idx: i, dist: hammingDistance(combined, paperBinary) })
+          }
+          candidateResults.sort((a, b) => a.dist - b.dist)
+          // No reranking here — a cross-encoder pass needs one text to
+          // compare each candidate against, and there isn't a single query
+          // string for a combined-embedding search. Hamming order on the
+          // combined vector is the whole signal for this mode.
+          const topCandidates = candidateResults.slice(0, candidates)
+
+          const results = topCandidates.slice(0, topK).map((c, i) => ({
+            rank: i + 1,
+            idx: c.idx,
+            arxiv_id: metadata!.arxiv_ids[c.idx],
+            title: metadata!.titles[c.idx],
+            categories: metadata!.categories[c.idx],
+            score: -c.dist,
+            hammingDist: c.dist,
+          }))
+          // reranked: true here isn't a cross-encoder claim — it just tells
+          // the UI this is the final ranking, not a fast pass that a
+          // reranked message will shortly replace (none is coming for this
+          // mode), so it doesn't show the "still loading" banner.
+          self.postMessage({ type: 'results', payload: results, reranked: true, requestId })
           break
         }
 

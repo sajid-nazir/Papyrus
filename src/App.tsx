@@ -13,7 +13,7 @@ import { parseArxivId } from './lib/parse-arxiv-id'
 import './App.css'
 
 function App() {
-  const { search, findSimilar, findById, buildGraph } = useMLWorker()
+  const { search, findSimilar, findById, findSimilarToSaved, buildGraph } = useMLWorker()
   const filters = useSearchStore(s => s.filters)
   const savedCount = useReadingListStore(s => s.papers.length)
   const { theme, toggleTheme } = useTheme()
@@ -68,7 +68,12 @@ function App() {
       </header>
       <main>
         {readingListOpen ? (
-          <ReadingList />
+          <ReadingList
+            onFindMoreLikeThese={(idxs, label) => {
+              findSimilarToSaved(idxs, label)
+              setReadingListOpen(false)
+            }}
+          />
         ) : (
           <>
             <SearchBox onSearch={search} onFindById={findById} />

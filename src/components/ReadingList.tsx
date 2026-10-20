@@ -1,8 +1,13 @@
 import { useReadingListStore } from '../stores/readingListStore'
 import { toBibtex, toRis, toCsv, downloadTextFile } from '../lib/export-formats'
 
-export function ReadingList() {
+interface ReadingListProps {
+  onFindMoreLikeThese: (idxs: number[], label: string) => void
+}
+
+export function ReadingList({ onFindMoreLikeThese }: ReadingListProps) {
   const { papers, removePaper, clearAll } = useReadingListStore()
+  const arxivPapers = papers.filter((p) => p.source === 'arxiv' && p.idx !== null)
 
   function exportAs(format: 'bibtex' | 'ris' | 'csv') {
     const stamp = new Date().toISOString().slice(0, 10)
@@ -15,6 +20,12 @@ export function ReadingList() {
     }
   }
 
+  function findMoreLikeThese() {
+    const idxs = arxivPapers.map((p) => p.idx as number)
+    const label = `your reading list (${idxs.length} paper${idxs.length === 1 ? '' : 's'})`
+    onFindMoreLikeThese(idxs, label)
+  }
+
   return (
     <div className="reading-list">
       <div className="reading-list-header">
@@ -22,6 +33,14 @@ export function ReadingList() {
         <div className="actions-right">
           {papers.length > 0 && (
             <>
+              <button
+                className="btn-sm"
+                onClick={findMoreLikeThese}
+                disabled={arxivPapers.length === 0}
+                title={arxivPapers.length === 0 ? 'Needs at least one saved arXiv paper (Europe PMC saves can\'t seed this)' : undefined}
+              >
+                Find more like these
+              </button>
               <button className="btn-sm" onClick={() => exportAs('bibtex')}>Export BibTeX</button>
               <button className="btn-sm" onClick={() => exportAs('ris')}>Export RIS</button>
               <button className="btn-sm" onClick={() => exportAs('csv')}>Export CSV</button>
