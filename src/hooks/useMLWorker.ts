@@ -121,8 +121,8 @@ export function useMLWorker() {
           break
 
         case 'index-loaded': {
-          const { count } = payload as { count: number }
-          setIndexLoaded(count)
+          const { count, builtAt } = payload as { count: number; builtAt: string | null }
+          setIndexLoaded(count, builtAt)
 
           // Detect WebGPU on main thread with timeout, then load models
           void (async () => {

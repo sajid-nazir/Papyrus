@@ -1,8 +1,19 @@
 #!/usr/bin/env python3
 """Split binary_embeddings.bin into ~10MB chunks with a manifest."""
-import json, os, sys, math
+import hashlib, json, os, sys, math
+from datetime import datetime, timezone
 
 CHUNK_SIZE = 10 * 1024 * 1024  # 10MB
+
+def content_version(path, length=12):
+    # A hash of the actual data, not a hand-bumped counter — so the client
+    # cache naturally invalidates whenever the index is rebuilt, even if
+    # nobody remembers to bump a version number.
+    h = hashlib.sha256()
+    with open(path, 'rb') as f:
+        for block in iter(lambda: f.read(1024 * 1024), b''):
+            h.update(block)
+    return h.hexdigest()[:length]
 
 def split(input_path, output_dir):
     os.makedirs(output_dir, exist_ok=True)
@@ -20,7 +31,8 @@ def split(input_path, output_dir):
             chunks.append({'name': chunk_name, 'size': len(chunk_data)})
 
     manifest = {
-        'version': 'v1',
+        'version': content_version(input_path),
+        'builtAt': datetime.now(timezone.utc).strftime('%Y-%m-%d'),
         'totalSize': file_size,
         'chunkSize': CHUNK_SIZE,
         'chunks': chunks,
@@ -29,6 +41,7 @@ def split(input_path, output_dir):
         json.dump(manifest, f, indent=2)
 
     print(f'Split {file_size:,} bytes into {num_chunks} chunks in {output_dir}/')
+    print(f'Manifest version: {manifest["version"]}')
 
 if __name__ == '__main__':
     if len(sys.argv) != 3:

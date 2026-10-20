@@ -21,8 +21,15 @@ export default defineConfig(({ mode }) => {
           globIgnores: ['**/worker*.js'],
           runtimeCaching: [
             {
+              // NetworkFirst, not CacheFirst: these two files are how the
+              // app detects a rebuilt index (chunk_manifest.json carries the
+              // content-hash version; metadata is fetched under that same
+              // version). CacheFirst would keep serving a stale copy from
+              // the service worker's own HTTP cache even after the app's
+              // IndexedDB layer decides it needs fresh data — this still
+              // falls back to the cache when offline.
               urlPattern: /metadata_columnar\.json$|chunk_manifest\.json$/,
-              handler: 'CacheFirst',
+              handler: 'NetworkFirst',
               options: {
                 cacheName: 'papyrus-data',
                 expiration: { maxEntries: 10, maxAgeSeconds: 30 * 24 * 60 * 60 },

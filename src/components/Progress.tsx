@@ -22,7 +22,7 @@ function ClearCacheButton() {
 }
 
 export function Progress() {
-  const { stage, substep, progress, error, device, paperCount } = useSearchStore()
+  const { stage, substep, progress, error, device, paperCount, indexBuiltAt } = useSearchStore()
   const sizes = currentModelSizes()
 
   if (stage === 'idle') return <div className="progress">Starting…</div>
@@ -41,6 +41,7 @@ export function Progress() {
     return (
       <div className="progress-ready" role="status" aria-live="polite">
         {paperCount.toLocaleString()} papers indexed · running on {device === 'webgpu' ? 'WebGPU' : 'CPU'}
+        {indexBuiltAt && ` · index from ${indexBuiltAt}`}
         <div className="actions-right">
           <ClearCacheButton />
         </div>

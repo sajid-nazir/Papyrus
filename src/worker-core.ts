@@ -12,6 +12,7 @@ import { hammingDistance, toUBinary, passesFilters, type Metadata } from './lib/
 
 interface ChunkManifest {
   version: string
+  builtAt?: string
   totalSize: number
   chunkSize: number
   chunks: Array<{ name: string; size: number }>
@@ -30,7 +31,10 @@ export type ProgressCallback = (data: { file: string; loaded: number; total: num
 
 const DEFAULT_BIN_SIZE_BYTES = 66_000_000
 const DEFAULT_METADATA_SIZE_BYTES = 180_000_000
-const CACHE_VERSION = 'v1'
+// Fallback only, for the legacy no-manifest path in fetchChunked() — normal
+// loads use chunk_manifest.json's content-hash `version` field instead, so
+// a rebuilt index invalidates every returning user's cache automatically.
+const FALLBACK_CACHE_VERSION = 'v1'
 
 export interface ModelConfig {
   modelId: string
@@ -124,11 +128,12 @@ async function fetchWithProgress(
   url: string,
   fileName: string,
   defaultSize: number,
-  progressCallback: ProgressCallback
+  progressCallback: ProgressCallback,
+  version: string = FALLBACK_CACHE_VERSION
 ): Promise<Uint8Array> {
   // Try cache first
   try {
-    const cached = await getCached(url, CACHE_VERSION)
+    const cached = await getCached(url, version)
     if (cached) {
       progressCallback({ file: fileName, loaded: cached.length, total: cached.length, progress: 100 })
       self.postMessage({ type: 'cache-hit', payload: fileName })
@@ -169,7 +174,7 @@ async function fetchWithProgress(
         return buffer
       }
     }
-    await setCache(url, buffer, CACHE_VERSION)
+    await setCache(url, buffer, version)
   } catch (e) {
     console.warn(`[cache] Write failed for ${fileName}:`, e)
     try { await clearCacheEntry(url) } catch { /* best-effort cleanup */ }
@@ -181,7 +186,7 @@ async function fetchWithProgress(
 async function fetchChunked(
   basePath: string,
   progressCallback: ProgressCallback
-): Promise<Uint8Array> {
+): Promise<{ buffer: Uint8Array; manifest: ChunkManifest | null }> {
   // Evict any other model's cached data files before pulling this one in —
   // each model's dataset lives under its own basePath but shares one
   // IndexedDB store, so without this, switching models (via ?model=) never
@@ -195,12 +200,13 @@ async function fetchChunked(
     if (!res.ok) throw new Error('No manifest')
     manifest = await res.json() as ChunkManifest
   } catch {
-    return fetchWithProgress(
+    const buffer = await fetchWithProgress(
       `${basePath}/binary_embeddings.bin`,
       'binary_embeddings.bin',
       DEFAULT_BIN_SIZE_BYTES,
       progressCallback
     )
+    return { buffer, manifest: null }
   }
 
   // Clean up old single-file cache entry (migration)
@@ -233,7 +239,8 @@ async function fetchChunked(
           `${basePath}/${chunk.name}`,
           chunk.name,
           chunk.size,
-          (p) => { chunkLoadedBytes[chunkIdx] = p.loaded; reportProgress() }
+          (p) => { chunkLoadedBytes[chunkIdx] = p.loaded; reportProgress() },
+          manifest.version
         )
         return { data, offset, chunkIdx }
       })
@@ -264,7 +271,8 @@ async function fetchChunked(
             `${basePath}/${chunk.name}`,
             chunk.name,
             chunk.size,
-            (p) => { chunkLoadedBytes[chunkIdx] = p.loaded; reportProgress() }
+            (p) => { chunkLoadedBytes[chunkIdx] = p.loaded; reportProgress() },
+            manifest.version
           )
           break
         } catch { /* retry */ }
@@ -283,7 +291,7 @@ async function fetchChunked(
     }
   }
 
-  return buffer
+  return { buffer, manifest }
 }
 
 export function createSearchWorker(config: ModelConfig): void {
@@ -310,14 +318,19 @@ export function createSearchWorker(config: ModelConfig): void {
           self.postMessage({ type: 'stage', payload: 'loading-index' })
 
           self.postMessage({ type: 'substep', payload: 'downloading-embeddings' })
-          binaryIndex = await fetchChunked(config.dataPath, progressCallback)
+          const { buffer: embeddingsBuffer, manifest } = await fetchChunked(config.dataPath, progressCallback)
+          binaryIndex = embeddingsBuffer
 
           self.postMessage({ type: 'substep', payload: 'downloading-metadata' })
+          // Metadata is produced in the same rebuild as the embeddings, so it
+          // shares the manifest's content-hash version — a rebuild without a
+          // manifest (legacy/offline fallback) just keeps the old constant.
           const metaBuffer = await fetchWithProgress(
             `${config.dataPath}/metadata_columnar.json`,
             'metadata.json',
             DEFAULT_METADATA_SIZE_BYTES,
-            progressCallback
+            progressCallback,
+            manifest?.version
           )
 
           self.postMessage({ type: 'substep', payload: 'loading-memory' })
@@ -326,7 +339,7 @@ export function createSearchWorker(config: ModelConfig): void {
 
           self.postMessage({
             type: 'index-loaded',
-            payload: { count: metadata?.titles.length ?? 0 },
+            payload: { count: metadata?.titles.length ?? 0, builtAt: manifest?.builtAt ?? null },
           })
 
           // Compute and emit category summary
