@@ -96,12 +96,17 @@ body {
 }
 
 .app {
-  position: relative;
   max-width: 720px;
   margin: 0 auto;
   padding: 24px 16px;
 }
 
+/* No positioned ancestor in between (.app deliberately isn't one) — this
+   anchors to the full browser viewport width, not the centered 720px
+   column, so it sits flush in the page's actual top-right corner. Still
+   scrolls away with the page like any other absolutely-positioned element
+   with no positioned ancestor (unlike position: fixed, which would hover
+   over scrolling content — that was tried and looked wrong). */
 .theme-toggle-btn {
   position: absolute;
   top: 16px;
@@ -128,15 +133,11 @@ header h1 {
   margin: 0 0 24px;
 }
 
-.app-header {
+.toolbar-row {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  /* Clears the absolutely-positioned theme toggle sharing this corner. */
-  padding-right: 44px;
+  justify-content: flex-end;
+  margin-bottom: 8px;
 }
-.app-header h1 { margin-bottom: 0; }
 
 .reading-list-header {
   display: flex;

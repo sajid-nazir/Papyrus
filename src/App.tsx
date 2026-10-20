@@ -60,13 +60,15 @@ function App() {
           <button aria-label="Dismiss" onClick={() => setLowMemory(false)}>✕</button>
         </div>
       )}
-      <header className="app-header">
+      <header>
         <h1>Papyrus</h1>
-        <button className="btn-sm" onClick={() => setReadingListOpen(v => !v)} aria-pressed={readingListOpen}>
-          {readingListOpen ? 'Back to search' : `Reading list${savedCount > 0 ? ` (${savedCount})` : ''}`}
-        </button>
       </header>
       <main>
+        <div className="toolbar-row">
+          <button className="btn-sm" onClick={() => setReadingListOpen(v => !v)} aria-pressed={readingListOpen}>
+            {readingListOpen ? 'Back to search' : `Reading list${savedCount > 0 ? ` (${savedCount})` : ''}`}
+          </button>
+        </div>
         {readingListOpen ? (
           <ReadingList
             onFindMoreLikeThese={(idxs, label) => {
