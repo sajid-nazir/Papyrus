@@ -1,11 +1,13 @@
 import { useState, useCallback, type FocusEvent, type KeyboardEvent } from 'react'
 import { useSearchStore } from '../stores/searchStore'
+import { parseArxivId } from '../lib/parse-arxiv-id'
 
 interface SearchBoxProps {
   onSearch: (query: string) => void
+  onFindById: (arxivId: string) => void
 }
 
-export function SearchBox({ onSearch }: SearchBoxProps) {
+export function SearchBox({ onSearch, onFindById }: SearchBoxProps) {
   const { query, setQuery, modelsLoaded, stage } = useSearchStore()
   const [showHistory, setShowHistory] = useState(false)
   const { searchHistory } = useSearchStore()
@@ -13,11 +15,18 @@ export function SearchBox({ onSearch }: SearchBoxProps) {
   const isReady = modelsLoaded && stage === 'ready'
   const isSearching = stage === 'searching'
 
+  const submit = useCallback((text: string) => {
+    if (!text.trim() || !isReady) return
+    const trimmed = text.trim()
+    const arxivId = parseArxivId(trimmed)
+    if (arxivId) onFindById(arxivId)
+    else onSearch(trimmed)
+  }, [isReady, onSearch, onFindById])
+
   const handleSearch = useCallback(() => {
-    if (!query.trim() || !isReady) return
-    onSearch(query.trim())
+    submit(query)
     setShowHistory(false)
-  }, [query, isReady, onSearch])
+  }, [query, submit])
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLInputElement>) => {
@@ -64,7 +73,7 @@ export function SearchBox({ onSearch }: SearchBoxProps) {
             <li key={h} role="option" aria-selected="false">
               <button
                 type="button"
-                onClick={() => { setQuery(h); setShowHistory(false); if (isReady) onSearch(h) }}
+                onClick={() => { setQuery(h); setShowHistory(false); submit(h) }}
               >
                 {h}
               </button>

@@ -35,6 +35,10 @@ interface SearchState {
   detailsFailed: boolean
   graph: GraphData | null
   graphOpen: boolean
+  // Set when a pasted arXiv id/link isn't in the local index — distinct
+  // from `error`, which puts the whole app into its global error stage;
+  // this is just an inline note next to an otherwise-normal search view.
+  idNotFound: string | null
 
   // External (Europe PMC) search — opt-in since, unlike arXiv, the raw
   // query text leaves the device when this is on.
@@ -67,6 +71,7 @@ interface SearchState {
   setDetailsFailed: (v: boolean) => void
   setGraph: (graph: GraphData | null) => void
   setGraphOpen: (open: boolean) => void
+  setIdNotFound: (arxivId: string | null) => void
   setExternalSearchEnabled: (v: boolean) => void
   setExternalResults: (results: ExternalResult[]) => void
   setExternalSearchLoading: (v: boolean) => void
@@ -100,6 +105,7 @@ const initialState = {
   detailsFailed: false,
   graph: null as GraphData | null,
   graphOpen: false,
+  idNotFound: null as string | null,
   externalSearchEnabled: false,
   externalResults: [] as ExternalResult[],
   externalSearchLoading: false,
@@ -183,6 +189,7 @@ export const useSearchStore = create<SearchState>()(
           if (state.stage === 'searching') state.stage = 'ready'
           state.graph = null
           state.graphOpen = false
+          state.idNotFound = null
         }),
 
       addToHistory: (query) =>
@@ -261,6 +268,11 @@ export const useSearchStore = create<SearchState>()(
       setGraphOpen: (open) =>
         set((state) => {
           state.graphOpen = open
+        }),
+
+      setIdNotFound: (arxivId) =>
+        set((state) => {
+          state.idNotFound = arxivId
         }),
 
       setExternalSearchEnabled: (v) =>

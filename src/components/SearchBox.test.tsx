@@ -21,7 +21,7 @@ describe('SearchBox history dropdown', () => {
     useSearchStore.getState().addToHistory('graph neural networks')
     const onSearch = vi.fn()
 
-    render(<SearchBox onSearch={onSearch} />)
+    render(<SearchBox onSearch={onSearch} onFindById={vi.fn()} />)
 
     await user.click(screen.getByRole('combobox', { name: 'Search papers' }))
     expect(screen.getByRole('listbox', { name: 'Recent searches' })).toBeInTheDocument()
@@ -50,7 +50,7 @@ describe('SearchBox history dropdown', () => {
 
     render(
       <div>
-        <SearchBox onSearch={vi.fn()} />
+        <SearchBox onSearch={vi.fn()} onFindById={vi.fn()} />
         <button>outside</button>
       </div>
     )
@@ -70,7 +70,7 @@ describe('SearchBox history dropdown', () => {
   it('does not submit an empty query when the Search button is disabled', async () => {
     useSearchStore.setState({ modelsLoaded: true, stage: 'idle' }) // not 'ready'
     const onSearch = vi.fn()
-    render(<SearchBox onSearch={onSearch} />)
+    render(<SearchBox onSearch={onSearch} onFindById={vi.fn()} />)
 
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Search' }))

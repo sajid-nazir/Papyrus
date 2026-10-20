@@ -9,10 +9,11 @@ import { Progress } from './components/Progress'
 import { Results } from './components/Results'
 import { ReadingList } from './components/ReadingList'
 import { totalDownloadMB } from './lib/model-sizes'
+import { parseArxivId } from './lib/parse-arxiv-id'
 import './App.css'
 
 function App() {
-  const { search, findSimilar, buildGraph } = useMLWorker()
+  const { search, findSimilar, findById, buildGraph } = useMLWorker()
   const filters = useSearchStore(s => s.filters)
   const savedCount = useReadingListStore(s => s.papers.length)
   const { theme, toggleTheme } = useTheme()
@@ -28,8 +29,11 @@ function App() {
   useEffect(() => {
     const timeout = setTimeout(() => {
       const { resultQuery, similarQuery, similarSeedIdx } = useSearchStore.getState()
+      const idQuery = parseArxivId(resultQuery)
       if (similarQuery && similarSeedIdx !== null) {
         findSimilar(similarSeedIdx, similarQuery, { refresh: true })
+      } else if (idQuery) {
+        findById(idQuery)
       } else if (resultQuery) {
         search(resultQuery)
       }
@@ -67,7 +71,7 @@ function App() {
           <ReadingList />
         ) : (
           <>
-            <SearchBox onSearch={search} />
+            <SearchBox onSearch={search} onFindById={findById} />
             <Filters />
             <Progress />
             <Results onFindSimilar={findSimilar} onBuildGraph={buildGraph} />

@@ -304,9 +304,74 @@ export function createSearchWorker(config: ModelConfig): void {
   // inference or reranking) — see the matching comment in useMLWorker.ts.
   let currentGraphRequestId = 0
   let rerankerReady = false
+  // Built lazily on first lookup, not at index-load time — pasting an
+  // arXiv id/link is a less common path than a plain search, not worth
+  // the extra memory/time on every load for users who never use it.
+  let idToIdx: Map<string, number> | null = null
 
   const progressCallback: ProgressCallback = (data) => {
     self.postMessage({ type: 'progress', payload: data })
+  }
+
+  // Shared by 'find-similar' and 'find-by-id' — both just need an idx to
+  // start from, resolved differently (already known vs. looked up by id).
+  async function runFindSimilar(
+    idx: number,
+    topK: number,
+    candidates: number,
+    requestId: number | undefined,
+    filters: { categories: string[]; yearRange: [number, number] | null } | undefined
+  ): Promise<void> {
+    if (requestId !== undefined) currentRequestId = requestId
+
+    self.postMessage({ type: 'stage', payload: 'searching', requestId })
+
+    const bytesPerPaper = config.dimension / 8
+    const queryBinary = binaryIndex!.slice(idx * bytesPerPaper, (idx + 1) * bytesPerPaper)
+    const numPapers = metadata!.titles.length
+    const candidateResults: Array<{ idx: number; dist: number }> = []
+
+    for (let i = 0; i < numPapers; i++) {
+      if (i === idx) continue
+      if (!passesFilters(metadata!, i, filters)) continue
+      const paperBinary = binaryIndex!.subarray(i * bytesPerPaper, (i + 1) * bytesPerPaper)
+      candidateResults.push({ idx: i, dist: hammingDistance(queryBinary, paperBinary) })
+    }
+
+    candidateResults.sort((a, b) => a.dist - b.dist)
+    const topCandidates = candidateResults.slice(0, candidates)
+
+    const hammingResults = topCandidates.slice(0, topK).map((c, i) => ({
+      rank: i + 1,
+      idx: c.idx,
+      arxiv_id: metadata!.arxiv_ids[c.idx],
+      title: metadata!.titles[c.idx],
+      categories: metadata!.categories[c.idx],
+      score: 0,
+      hammingDist: c.dist,
+    }))
+    self.postMessage({ type: 'similar-hamming', payload: hammingResults, requestId })
+
+    if (rerankerReady) {
+      const titles = topCandidates.map((c) => metadata!.titles[c.idx])
+      const sourceTitle = metadata!.titles[idx]
+      const scores = await Reranker.rerank(sourceTitle, titles)
+
+      if (requestId !== undefined && requestId !== currentRequestId) return
+
+      const results = topCandidates.map((c, i) => ({
+        rank: 0,
+        idx: c.idx,
+        arxiv_id: metadata!.arxiv_ids[c.idx],
+        title: metadata!.titles[c.idx],
+        categories: metadata!.categories[c.idx],
+        score: scores[i],
+        hammingDist: c.dist,
+      }))
+      results.sort((a, b) => b.score - a.score)
+      for (let i = 0; i < results.length; i++) results[i].rank = i + 1
+      self.postMessage({ type: 'results', payload: results.slice(0, topK), reranked: true, requestId })
+    }
   }
 
   self.addEventListener('message', async (event: MessageEvent) => {
@@ -484,56 +549,35 @@ export function createSearchWorker(config: ModelConfig): void {
             filters?: { categories: string[]; yearRange: [number, number] | null }
           }
 
-          if (requestId !== undefined) currentRequestId = requestId
+          await runFindSimilar(idx, topK, candidates, requestId, filters)
+          break
+        }
 
-          self.postMessage({ type: 'stage', payload: 'searching', requestId })
-
-          const bytesPerPaper = config.dimension / 8
-          const queryBinary = binaryIndex.slice(idx * bytesPerPaper, (idx + 1) * bytesPerPaper)
-          const numPapers = metadata.titles.length
-          const candidateResults: Array<{ idx: number; dist: number }> = []
-
-          for (let i = 0; i < numPapers; i++) {
-            if (i === idx) continue
-            if (!passesFilters(metadata, i, filters)) continue
-            const paperBinary = binaryIndex.subarray(i * bytesPerPaper, (i + 1) * bytesPerPaper)
-            candidateResults.push({ idx: i, dist: hammingDistance(queryBinary, paperBinary) })
+        case 'find-by-id': {
+          if (!binaryIndex || !metadata) {
+            throw new Error('Index not loaded')
           }
 
-          candidateResults.sort((a, b) => a.dist - b.dist)
-          const topCandidates = candidateResults.slice(0, candidates)
-
-          const hammingResults = topCandidates.slice(0, topK).map((c, i) => ({
-            rank: i + 1,
-            idx: c.idx,
-            arxiv_id: metadata!.arxiv_ids[c.idx],
-            title: metadata!.titles[c.idx],
-            categories: metadata!.categories[c.idx],
-            score: 0,
-            hammingDist: c.dist,
-          }))
-          self.postMessage({ type: 'similar-hamming', payload: hammingResults, requestId })
-
-          if (rerankerReady) {
-            const titles = topCandidates.map((c) => metadata!.titles[c.idx])
-            const sourceTitle = metadata!.titles[idx]
-            const scores = await Reranker.rerank(sourceTitle, titles)
-
-            if (requestId !== undefined && requestId !== currentRequestId) break
-
-            const results = topCandidates.map((c, i) => ({
-              rank: 0,
-              idx: c.idx,
-              arxiv_id: metadata!.arxiv_ids[c.idx],
-              title: metadata!.titles[c.idx],
-              categories: metadata!.categories[c.idx],
-              score: scores[i],
-              hammingDist: c.dist,
-            }))
-            results.sort((a, b) => b.score - a.score)
-            for (let i = 0; i < results.length; i++) results[i].rank = i + 1
-            self.postMessage({ type: 'results', payload: results.slice(0, topK), reranked: true, requestId })
+          const { arxivId, topK = 10, candidates = 300, requestId, filters } = payload as {
+            arxivId: string
+            topK?: number
+            candidates?: number
+            requestId?: number
+            filters?: { categories: string[]; yearRange: [number, number] | null }
           }
+
+          if (!idToIdx) {
+            idToIdx = new Map()
+            metadata.arxiv_ids.forEach((id, i) => idToIdx!.set(id, i))
+          }
+          const idx = idToIdx.get(arxivId)
+
+          if (idx === undefined) {
+            self.postMessage({ type: 'id-not-found', payload: arxivId, requestId })
+            break
+          }
+
+          await runFindSimilar(idx, topK, candidates, requestId, filters)
           break
         }
 

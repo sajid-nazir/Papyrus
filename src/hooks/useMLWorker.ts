@@ -24,6 +24,7 @@ type WorkerMessageType =
   | 'categories-summary'
   | 'graph'
   | 'graph-error'
+  | 'id-not-found'
   | 'error'
 
 interface WorkerMessage {
@@ -91,6 +92,7 @@ export function useMLWorker() {
     setDetailsFailed,
     setGraph,
     setGraphOpen,
+    setIdNotFound,
   } = useSearchStore()
 
   useEffect(() => {
@@ -196,6 +198,14 @@ export function useMLWorker() {
           break
         }
 
+        case 'id-not-found': {
+          const msgRequestId = (event.data as { requestId?: number }).requestId
+          if (msgRequestId !== undefined && msgRequestId !== requestIdRef.current) break
+          setStage('ready')
+          setIdNotFound(payload as string)
+          break
+        }
+
         case 'similar-hamming': {
           const msgRequestId = (event.data as { requestId?: number }).requestId
           if (msgRequestId !== undefined && msgRequestId !== requestIdRef.current) break
@@ -263,7 +273,7 @@ export function useMLWorker() {
       externalAbortControllerRef.current?.abort()
       worker.terminate()
     }
-  }, [setStage, setSubstep, setDevice, setError, updateProgress, setIndexLoaded, setModelsLoaded, setResults, addToHistory, setAvailableCategories, setIsReranking, setRerankerReady, setPaperDetails, setDetailsLoading, setDetailsFailed, setGraph, setGraphOpen])
+  }, [setStage, setSubstep, setDevice, setError, updateProgress, setIndexLoaded, setModelsLoaded, setResults, addToHistory, setAvailableCategories, setIsReranking, setRerankerReady, setPaperDetails, setDetailsLoading, setDetailsFailed, setGraph, setGraphOpen, setIdNotFound])
 
   const search = useCallback(
     (query: string, topK = RESULT_POOL_SIZE, candidates = RESULT_POOL_SIZE) => {
@@ -347,5 +357,29 @@ export function useMLWorker() {
     []
   )
 
-  return { search, findSimilar, buildGraph }
+  // Looks a paper up by arXiv id directly (a pasted link/id recognized as
+  // the search query) instead of embedding it as text — the paper's
+  // position in the index is already known, so this skips straight to the
+  // same hamming-distance + rerank flow as "Find Similar".
+  const findById = useCallback(
+    (arxivId: string) => {
+      if (!workerRef.current || !readyRef.current) return
+      requestIdRef.current += 1
+      const { filters } = useSearchStore.getState()
+      useSearchStore.getState().setError(null)
+      useSearchStore.getState().setIdNotFound(null)
+      useSearchStore.getState().clearSimilarHistory()
+      addToHistory(arxivId)
+      setStage('searching')
+      externalAbortControllerRef.current?.abort()
+      useSearchStore.getState().setExternalResults([])
+      workerRef.current.postMessage({
+        type: 'find-by-id',
+        payload: { arxivId, topK: RESULT_POOL_SIZE, candidates: RESULT_POOL_SIZE, filters, requestId: requestIdRef.current },
+      })
+    },
+    [addToHistory, setStage]
+  )
+
+  return { search, findSimilar, findById, buildGraph }
 }

@@ -53,7 +53,7 @@ export function Results({ onFindSimilar, onBuildGraph }: ResultsProps) {
     results, stage, resultQuery, similarQuery, similarStack,
     isReranking, resultsReranked, paperDetails, detailsLoading, detailsFailed,
     filters, resetFilters,
-    graph, graphOpen, setGraphOpen,
+    graph, graphOpen, setGraphOpen, idNotFound,
     externalSearchEnabled, externalResults, externalSearchLoading,
     setPaperDetails, setDetailsLoading,
   } = useSearchStore()
@@ -163,6 +163,14 @@ export function Results({ onFindSimilar, onBuildGraph }: ResultsProps) {
     return (
       <div className="results-container">
         <div className="loading-spinner" role="status" aria-label="Searching" />
+      </div>
+    )
+  }
+
+  if (stage === 'ready' && idNotFound) {
+    return (
+      <div className="results-empty" role="status">
+        arXiv:{idNotFound} isn't in this index — it may be newer than this snapshot, or outside arXiv's main categories.
       </div>
     )
   }
