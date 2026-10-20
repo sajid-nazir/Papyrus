@@ -1,9 +1,12 @@
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useState, useEffect } from 'react'
 import { useSearchStore } from '../stores/searchStore'
 import { catColor } from '../lib/categories'
-import type { ExternalResult } from '../types'
+import { fetchArxivDetails } from '../lib/arxiv-api'
+import type { ExternalResult, PaperDetail } from '../types'
 
 const GraphView = lazy(() => import('./GraphView').then(m => ({ default: m.GraphView })))
+
+const RESULTS_PAGE_SIZE = 10
 
 function normalizeTitle(title: string): string {
   return title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
@@ -21,15 +24,60 @@ export function Results({ onFindSimilar, onBuildGraph }: ResultsProps) {
     filters, resetFilters,
     graph, graphOpen, setGraphOpen,
     externalSearchEnabled, externalResults, externalSearchLoading,
+    setPaperDetails, setDetailsLoading,
   } = useSearchStore()
   const [copied, setCopied] = useState(false)
   const [copiedBibtex, setCopiedBibtex] = useState<string | null>(null)
   const [expandedAbstracts, setExpandedAbstracts] = useState<Set<string>>(new Set())
+  const [visibleCount, setVisibleCount] = useState(RESULTS_PAGE_SIZE)
+
+  // A new search or a new "find similar" view should start back at the
+  // first page — but the same view's results array also gets replaced once
+  // (fast hamming results → reranked results), and that replacement must
+  // NOT reset the page the user is looking at. resultQuery/similarQuery
+  // only change on an actual new view, not on that second replacement.
+  // Adjusted during render (React's blessed pattern for this, not an
+  // effect) so there's no extra render pass.
+  const viewKey = `${resultQuery}\u0000${similarQuery ?? ''}`
+  const [prevViewKey, setPrevViewKey] = useState(viewKey)
+  if (viewKey !== prevViewKey) {
+    setPrevViewKey(viewKey)
+    setVisibleCount(RESULTS_PAGE_SIZE)
+  }
+
+  const visibleResults = results.slice(0, visibleCount)
+
+  // The first page's abstracts are fetched by useMLWorker as soon as
+  // results arrive; this only tops up abstracts for pages revealed via
+  // "Load more" that aren't covered by that initial fetch yet.
+  useEffect(() => {
+    if (visibleCount <= RESULTS_PAGE_SIZE) return
+    const idsNeeded = visibleResults
+      .map(r => r.arxiv_id)
+      .filter(id => !paperDetails[id])
+    if (idsNeeded.length === 0) return
+
+    const controller = new AbortController()
+    setDetailsLoading(true)
+    fetchArxivDetails(idsNeeded, controller.signal).then(detailsMap => {
+      if (controller.signal.aborted) return
+      const details: Record<string, PaperDetail> = {}
+      detailsMap.forEach((v, k) => {
+        details[k] = { abstract: v.abstract, authors: v.authors, published: v.published }
+      })
+      setPaperDetails(details)
+      setDetailsLoading(false)
+    }).catch((e) => {
+      if ((e as Error).name !== 'AbortError') setDetailsLoading(false)
+    })
+    return () => controller.abort()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleCount, results])
 
   function toggleGraph() {
     const open = !graphOpen
     setGraphOpen(open)
-    if (open) onBuildGraph(results.map(r => r.idx))
+    if (open) onBuildGraph(visibleResults.map(r => r.idx))
   }
 
   function toggleAbstract(arxivId: string) {
@@ -119,7 +167,11 @@ export function Results({ onFindSimilar, onBuildGraph }: ResultsProps) {
           <h2 className="results-title">"{resultQuery}"</h2>
         )}
         <span className="results-meta" role="status" aria-live="polite">
-          {isReranking ? 'Reranking…' : `${results.length} papers`}
+          {isReranking
+            ? 'Reranking…'
+            : visibleCount < results.length
+              ? `Showing ${visibleCount} of ${results.length} papers`
+              : `${results.length} papers`}
         </span>
         <div className="actions-right">
           <button className="btn-sm" onClick={toggleGraph} aria-pressed={graphOpen}>
@@ -146,7 +198,7 @@ export function Results({ onFindSimilar, onBuildGraph }: ResultsProps) {
         </Suspense>
       )}
 
-      {results.map((result) => {
+      {visibleResults.map((result) => {
         const detail = paperDetails[result.arxiv_id]
         const expanded = expandedAbstracts.has(result.arxiv_id)
         return (
@@ -232,6 +284,17 @@ export function Results({ onFindSimilar, onBuildGraph }: ResultsProps) {
           </div>
         )
       })}
+
+      {visibleCount < results.length && (
+        <div className="load-more-row">
+          <button
+            className="btn-sm"
+            onClick={() => setVisibleCount(c => Math.min(c + RESULTS_PAGE_SIZE, results.length))}
+          >
+            Load {Math.min(RESULTS_PAGE_SIZE, results.length - visibleCount)} more
+          </button>
+        </div>
+      )}
 
       {externalSearchEnabled && (externalSearchLoading || dedupedExternalResults.length > 0) && (
         <div className="external-results">

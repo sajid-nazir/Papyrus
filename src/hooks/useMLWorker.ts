@@ -33,6 +33,12 @@ interface WorkerMessage {
 
 type ModelType = 'mxbai' | 'nomic' | 'minilm'
 
+// The worker already scores and reranks this many candidates per query —
+// asking it to send all of them back costs nothing extra (reranking doesn't
+// depend on topK), and lets Results.tsx page through them locally instead
+// of re-querying the worker for "more results."
+const RESULT_POOL_SIZE = 300
+
 function createWorker(model: ModelType): Worker {
   switch (model) {
     case 'nomic':
@@ -153,7 +159,7 @@ export function useMLWorker() {
             setStage('searching')
             worker.postMessage({
               type: 'search',
-              payload: { query: urlQuery, topK: 10, candidates: 300, filters, requestId: requestIdRef.current },
+              payload: { query: urlQuery, topK: RESULT_POOL_SIZE, candidates: RESULT_POOL_SIZE, filters, requestId: requestIdRef.current },
             })
           }
           break
@@ -260,7 +266,7 @@ export function useMLWorker() {
   }, [setStage, setSubstep, setDevice, setError, updateProgress, setIndexLoaded, setModelsLoaded, setResults, addToHistory, setAvailableCategories, setIsReranking, setRerankerReady, setPaperDetails, setDetailsLoading, setDetailsFailed, setGraph, setGraphOpen])
 
   const search = useCallback(
-    (query: string, topK = 10, candidates = 300) => {
+    (query: string, topK = RESULT_POOL_SIZE, candidates = RESULT_POOL_SIZE) => {
       if (!workerRef.current || !readyRef.current) return
       requestIdRef.current += 1
       const { filters, externalSearchEnabled } = useSearchStore.getState()
@@ -322,7 +328,7 @@ export function useMLWorker() {
       useSearchStore.getState().setExternalResults([])
       workerRef.current.postMessage({
         type: 'find-similar',
-        payload: { idx, topK: 10, candidates: 300, filters, requestId: requestIdRef.current },
+        payload: { idx, topK: RESULT_POOL_SIZE, candidates: RESULT_POOL_SIZE, filters, requestId: requestIdRef.current },
       })
     },
     [setSimilarQuery, setStage]

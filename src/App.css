@@ -281,6 +281,8 @@ header h1 {
   padding-left: 10px;
 }
 
+.load-more-row { display: flex; justify-content: center; padding: 16px 0; }
+
 .external-results { margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--border); }
 .external-results-title { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin: 0 0 8px; text-transform: uppercase; letter-spacing: 0.03em; }
 .external-result-card { border-left-color: var(--border); }
