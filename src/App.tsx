@@ -1,22 +1,26 @@
 import { useEffect, useState } from 'react'
 import { useMLWorker } from './hooks/useMLWorker'
 import { useSearchStore } from './stores/searchStore'
+import { useReadingListStore } from './stores/readingListStore'
 import { useTheme } from './hooks/useTheme'
 import { SearchBox } from './components/SearchBox'
 import { Filters } from './components/Filters'
 import { Progress } from './components/Progress'
 import { Results } from './components/Results'
+import { ReadingList } from './components/ReadingList'
 import { totalDownloadMB } from './lib/model-sizes'
 import './App.css'
 
 function App() {
   const { search, findSimilar, buildGraph } = useMLWorker()
   const filters = useSearchStore(s => s.filters)
+  const savedCount = useReadingListStore(s => s.papers.length)
   const { theme, toggleTheme } = useTheme()
   const [lowMemory, setLowMemory] = useState(() => {
     const mem = (navigator as unknown as { deviceMemory?: number }).deviceMemory
     return mem !== undefined && mem <= 2
   })
+  const [readingListOpen, setReadingListOpen] = useState(false)
 
   // Re-run the current search or "similar to" view when filters change —
   // otherwise toggling a category pill after results are already showing
@@ -52,14 +56,23 @@ function App() {
           <button aria-label="Dismiss" onClick={() => setLowMemory(false)}>✕</button>
         </div>
       )}
-      <header>
+      <header className="app-header">
         <h1>Papyrus</h1>
+        <button className="btn-sm" onClick={() => setReadingListOpen(v => !v)} aria-pressed={readingListOpen}>
+          {readingListOpen ? 'Back to search' : `Reading list${savedCount > 0 ? ` (${savedCount})` : ''}`}
+        </button>
       </header>
       <main>
-        <SearchBox onSearch={search} />
-        <Filters />
-        <Progress />
-        <Results onFindSimilar={findSimilar} onBuildGraph={buildGraph} />
+        {readingListOpen ? (
+          <ReadingList />
+        ) : (
+          <>
+            <SearchBox onSearch={search} />
+            <Filters />
+            <Progress />
+            <Results onFindSimilar={findSimilar} onBuildGraph={buildGraph} />
+          </>
+        )}
       </main>
     </div>
   )

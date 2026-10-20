@@ -1,8 +1,9 @@
 import { lazy, Suspense, useState, useEffect } from 'react'
 import { useSearchStore } from '../stores/searchStore'
+import { useReadingListStore } from '../stores/readingListStore'
 import { catColor } from '../lib/categories'
 import { fetchArxivDetails } from '../lib/arxiv-api'
-import type { ExternalResult, PaperDetail } from '../types'
+import type { ExternalResult, PaperDetail, SavedPaper, SearchResult } from '../types'
 
 const GraphView = lazy(() => import('./GraphView').then(m => ({ default: m.GraphView })))
 
@@ -10,6 +11,36 @@ const RESULTS_PAGE_SIZE = 10
 
 function normalizeTitle(title: string): string {
   return title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+}
+
+function arxivToSaved(result: SearchResult, detail?: PaperDetail): Omit<SavedPaper, 'savedAt'> {
+  return {
+    key: `arxiv:${result.arxiv_id}`,
+    source: 'arxiv',
+    id: result.arxiv_id,
+    idx: result.idx,
+    title: result.title,
+    authors: detail?.authors ?? [],
+    year: detail ? new Date(detail.published).getFullYear() : null,
+    journal: null,
+    url: `https://arxiv.org/abs/${result.arxiv_id}`,
+    doi: null,
+  }
+}
+
+function epmcToSaved(result: ExternalResult): Omit<SavedPaper, 'savedAt'> {
+  return {
+    key: `europepmc:${result.id}`,
+    source: 'europepmc',
+    id: result.id,
+    idx: null,
+    title: result.title,
+    authors: result.authors,
+    year: result.year,
+    journal: result.journal,
+    url: result.url,
+    doi: result.doi,
+  }
 }
 
 interface ResultsProps {
@@ -26,6 +57,7 @@ export function Results({ onFindSimilar, onBuildGraph }: ResultsProps) {
     externalSearchEnabled, externalResults, externalSearchLoading,
     setPaperDetails, setDetailsLoading,
   } = useSearchStore()
+  const { isSaved, addPaper, removePaper } = useReadingListStore()
   const [copied, setCopied] = useState(false)
   const [copiedBibtex, setCopiedBibtex] = useState<string | null>(null)
   const [expandedAbstracts, setExpandedAbstracts] = useState<Set<string>>(new Set())
@@ -279,6 +311,17 @@ export function Results({ onFindSimilar, onBuildGraph }: ResultsProps) {
                     {copiedBibtex === result.arxiv_id ? 'Copied!' : 'Copy BibTeX'}
                   </button>
                 )}
+                <button
+                  className="btn-sm save-btn"
+                  aria-pressed={isSaved(`arxiv:${result.arxiv_id}`)}
+                  onClick={() => {
+                    const key = `arxiv:${result.arxiv_id}`
+                    if (isSaved(key)) removePaper(key)
+                    else addPaper(arxivToSaved(result, detail))
+                  }}
+                >
+                  {isSaved(`arxiv:${result.arxiv_id}`) ? '★ Saved' : '☆ Save'}
+                </button>
               </div>
             </div>
           </div>
@@ -344,6 +387,17 @@ export function Results({ onFindSimilar, onBuildGraph }: ResultsProps) {
                     <div className="result-actions">
                       <button className="btn-sm" onClick={() => copyBibtexExternal(result)}>
                         {copiedBibtex === result.id ? 'Copied!' : 'Copy BibTeX'}
+                      </button>
+                      <button
+                        className="btn-sm save-btn"
+                        aria-pressed={isSaved(`europepmc:${result.id}`)}
+                        onClick={() => {
+                          const key = `europepmc:${result.id}`
+                          if (isSaved(key)) removePaper(key)
+                          else addPaper(epmcToSaved(result))
+                        }}
+                      >
+                        {isSaved(`europepmc:${result.id}`) ? '★ Saved' : '☆ Save'}
                       </button>
                     </div>
                   </div>

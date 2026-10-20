@@ -128,6 +128,26 @@ header h1 {
   margin: 0 0 24px;
 }
 
+.app-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  /* Clears the absolutely-positioned theme toggle sharing this corner. */
+  padding-right: 44px;
+}
+.app-header h1 { margin-bottom: 0; }
+
+.reading-list-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.reading-list-card { border-left-color: var(--border); }
+
 /* Search */
 .search-box { position: relative; margin-bottom: 12px; }
 
@@ -410,6 +430,11 @@ header h1 {
 }
 
 .btn-sm:hover { border-color: var(--text-muted); }
+
+.save-btn[aria-pressed="true"] {
+  border-color: #e0a500;
+  color: #e0a500;
+}
 
 /* Wraps a group of .btn-sm (or similar) to right-align as a unit, instead
    of each button carrying its own margin-left: auto — multiple auto

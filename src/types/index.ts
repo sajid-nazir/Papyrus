@@ -105,3 +105,23 @@ export interface ExternalResult {
   url: string
   doi: string | null
 }
+
+// A paper saved to the reading list — a flattened snapshot taken at save
+// time (not a live reference), so it still exports correctly even if the
+// paper scrolls out of the current search results or the search changes.
+// `idx` is only present for arXiv papers already in the local index (used
+// later for embedding-based "more like these"); Europe PMC papers don't
+// have one.
+export interface SavedPaper {
+  key: string // `${source}:${id}` — unique across both sources
+  source: 'arxiv' | 'europepmc'
+  id: string
+  idx: number | null
+  title: string
+  authors: string[]
+  year: number | null
+  journal: string | null
+  url: string
+  doi: string | null
+  savedAt: number
+}
