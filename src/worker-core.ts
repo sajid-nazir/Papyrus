@@ -8,7 +8,11 @@ import {
   type PreTrainedModel,
 } from '@huggingface/transformers'
 import { getCached, setCache, clearCacheEntry, clearCacheExceptPrefix } from './lib/indexeddb-cache'
-import { hammingDistance, toUBinary, passesFilters, scanTopK, type Metadata } from './lib/binary-search-utils'
+import {
+  hammingDistance, toUBinary, passesFilters, scanTopK,
+  buildFilterIndex, selectedCategoryIds, passesFiltersFast,
+  type Metadata, type FilterIndex,
+} from './lib/binary-search-utils'
 
 interface ChunkManifest {
   version: string
@@ -321,6 +325,10 @@ export function createSearchWorker(config: ModelConfig): void {
   // so there's no stale-data risk, and it avoids a fresh ~2MB allocation
   // per search.
   let distScratch: Uint16Array | null = null
+  // Precomputed once at load — categories interned to small ids in a flat
+  // layout, years parsed out of arXiv ids once instead of per search. See
+  // buildFilterIndex's own comment for why.
+  let filterIndex: FilterIndex | null = null
   let currentRequestId = 0
   // Separate from currentRequestId: build-graph must not overwrite the id
   // search/find-similar stale-check against, since the graph can be
@@ -353,11 +361,13 @@ export function createSearchWorker(config: ModelConfig): void {
     const bytesPerPaper = config.dimension / 8
     const queryBinary = binaryIndex!.slice(idx * bytesPerPaper, (idx + 1) * bytesPerPaper)
     const numPapers = metadata!.titles.length
+    const selectedCats = selectedCategoryIds(filterIndex!, filters?.categories ?? [])
+    const yearRange = filters?.yearRange ?? null
 
     const topCandidates = scanTopK(
       queryBinary, binaryIndex!, bytesPerPaper, numPapers, config.dimension, candidates,
       distScratch!,
-      (i) => i !== idx && passesFilters(metadata!, i, filters)
+      (i) => i !== idx && passesFiltersFast(filterIndex!, i, selectedCats, yearRange)
     )
 
     const hammingResults = topCandidates.slice(0, topK).map((c, i) => ({
@@ -421,6 +431,7 @@ export function createSearchWorker(config: ModelConfig): void {
           const metaText = new TextDecoder().decode(metaBuffer)
           metadata = JSON.parse(metaText)
           distScratch = new Uint16Array(metadata!.titles.length)
+          filterIndex = buildFilterIndex(metadata!)
 
           self.postMessage({
             type: 'index-loaded',
@@ -506,11 +517,13 @@ export function createSearchWorker(config: ModelConfig): void {
 
           const bytesPerPaper = config.dimension / 8
           const numPapers = metadata.titles.length
+          const selectedCats = selectedCategoryIds(filterIndex!, filters?.categories ?? [])
+          const yearRange = filters?.yearRange ?? null
 
           const topCandidates = scanTopK(
             binaryQuery, binaryIndex, bytesPerPaper, numPapers, config.dimension, candidates,
             distScratch!,
-            (i) => passesFilters(metadata!, i, filters)
+            (i) => passesFiltersFast(filterIndex!, i, selectedCats, yearRange)
           )
 
           if (topCandidates.length === 0) {
@@ -618,6 +631,8 @@ export function createSearchWorker(config: ModelConfig): void {
           const combined = majorityVoteBinary(seedVectors, bytesPerPaper)
 
           const numPapers = metadata.titles.length
+          const selectedCats = selectedCategoryIds(filterIndex!, filters?.categories ?? [])
+          const yearRange = filters?.yearRange ?? null
           // No reranking here — a cross-encoder pass needs one text to
           // compare each candidate against, and there isn't a single query
           // string for a combined-embedding search. Hamming order on the
@@ -625,7 +640,7 @@ export function createSearchWorker(config: ModelConfig): void {
           const topCandidates = scanTopK(
             combined, binaryIndex, bytesPerPaper, numPapers, config.dimension, candidates,
             distScratch!,
-            (i) => !seedSet.has(i) && passesFilters(metadata!, i, filters)
+            (i) => !seedSet.has(i) && passesFiltersFast(filterIndex!, i, selectedCats, yearRange)
           )
 
           const results = topCandidates.slice(0, topK).map((c, i) => ({

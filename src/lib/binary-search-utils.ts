@@ -143,3 +143,94 @@ export function passesFilters(
   }
   return true
 }
+
+// passesFilters above re-splits a category string and re-parses a year out
+// of the arXiv id on every call — fine for the occasional one-off check,
+// but a filtered search calls it once per paper, up to ~1M times. FilterIndex
+// precomputes both once (at index-load time) into flat typed arrays, and
+// passesFiltersFast below does the same OR-match / range-check logic
+// against that instead of raw strings — same result, no per-paper parsing.
+export interface FilterIndex {
+  // Each paper's category ids live in catIds[catOffsets[i] .. catOffsets[i+1]),
+  // a flat CSR-style layout instead of ~1M small per-paper arrays.
+  catIds: Uint16Array
+  catOffsets: Uint32Array
+  years: Uint16Array
+  catToId: Map<string, number>
+}
+
+export function buildFilterIndex(metadata: Metadata): FilterIndex {
+  const numPapers = metadata.titles.length
+  const catToId = new Map<string, number>()
+  const paperCatIds: number[][] = new Array(numPapers)
+  const years = new Uint16Array(numPapers)
+  let totalRefs = 0
+
+  for (let i = 0; i < numPapers; i++) {
+    const cats = metadata.categories[i].split(' ')
+    const ids: number[] = new Array(cats.length)
+    for (let j = 0; j < cats.length; j++) {
+      const c = cats[j]
+      let id = catToId.get(c)
+      if (id === undefined) {
+        id = catToId.size
+        catToId.set(c, id)
+      }
+      ids[j] = id
+    }
+    paperCatIds[i] = ids
+    totalRefs += ids.length
+    years[i] = yearFromArxivId(metadata.arxiv_ids[i])
+  }
+
+  const catIds = new Uint16Array(totalRefs)
+  const catOffsets = new Uint32Array(numPapers + 1)
+  let pos = 0
+  for (let i = 0; i < numPapers; i++) {
+    catOffsets[i] = pos
+    const ids = paperCatIds[i]
+    for (let j = 0; j < ids.length; j++) catIds[pos++] = ids[j]
+  }
+  catOffsets[numPapers] = pos
+
+  return { catIds, catOffsets, years, catToId }
+}
+
+// Resolves the filter panel's selected category strings to their interned
+// ids once per request — not once per paper. null means "no category
+// filter", matching passesFilters' `filters.categories.length > 0` gate.
+// A selected category with no matching id (shouldn't happen in practice —
+// the filter options come from this same index — but handled defensively)
+// just never matches any paper, same as it would with the string version.
+export function selectedCategoryIds(index: FilterIndex, categories: string[]): Set<number> | null {
+  if (categories.length === 0) return null
+  const ids = new Set<number>()
+  for (const c of categories) {
+    const id = index.catToId.get(c)
+    if (id !== undefined) ids.add(id)
+  }
+  return ids
+}
+
+export function passesFiltersFast(
+  index: FilterIndex,
+  i: number,
+  selectedCatIds: Set<number> | null,
+  yearRange: [number, number] | null
+): boolean {
+  if (selectedCatIds) {
+    let match = false
+    for (let j = index.catOffsets[i]; j < index.catOffsets[i + 1]; j++) {
+      if (selectedCatIds.has(index.catIds[j])) {
+        match = true
+        break
+      }
+    }
+    if (!match) return false
+  }
+  if (yearRange) {
+    const year = index.years[i]
+    if (year < yearRange[0] || year > yearRange[1]) return false
+  }
+  return true
+}

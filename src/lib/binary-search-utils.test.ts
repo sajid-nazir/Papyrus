@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { hammingDistance, toUBinary, yearFromArxivId, passesFilters, scanTopK, type Metadata } from './binary-search-utils'
+import {
+  hammingDistance, toUBinary, yearFromArxivId, passesFilters, scanTopK,
+  buildFilterIndex, selectedCategoryIds, passesFiltersFast,
+  type Metadata,
+} from './binary-search-utils'
 
 describe('hammingDistance', () => {
   it('is 0 for identical arrays', () => {
@@ -223,5 +227,121 @@ describe('scanTopK', () => {
     const second = scanTopK(query, binaryIndex, 1, 3, 8, 3, scratch, () => true)
     expect(second.map((r) => r.idx)).toEqual([0, 1, 2])
     expect(second.find((r) => r.idx === 2)?.dist).toBe(8)
+  })
+})
+
+describe('buildFilterIndex / passesFiltersFast', () => {
+  function mulberry32(seed: number) {
+    let a = seed
+    return () => {
+      a |= 0
+      a = (a + 0x6d2b79f5) | 0
+      let t = Math.imul(a ^ (a >>> 15), 1 | a)
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+    }
+  }
+
+  const ALL_CATS = ['cs.LG', 'cs.AI', 'cs.CV', 'math.CO', 'stat.ML', 'astro-ph.GA']
+
+  function buildRandomMetadata(rand: () => number, numPapers: number): Metadata {
+    const titles: string[] = []
+    const arxiv_ids: string[] = []
+    const categories: string[] = []
+    for (let i = 0; i < numPapers; i++) {
+      titles.push(`Paper ${i}`)
+      // Occasionally throw in a malformed id, like passesFilters' own tests do.
+      const yy = 90 + Math.floor(rand() * 35) // spans pre/post-2000
+      arxiv_ids.push(rand() < 0.1 ? 'not-an-id' : `${String(yy % 100).padStart(2, '0')}01.${String(i).padStart(5, '0')}`)
+      const n = 1 + Math.floor(rand() * 3)
+      const cats = new Set<string>()
+      for (let j = 0; j < n; j++) cats.add(ALL_CATS[Math.floor(rand() * ALL_CATS.length)])
+      categories.push(Array.from(cats).join(' '))
+    }
+    return { titles, arxiv_ids, categories }
+  }
+
+  it('matches passesFilters across many random trials (categories, year range, both, neither)', () => {
+    const rand = mulberry32(999)
+    for (let trial = 0; trial < 30; trial++) {
+      const numPapers = 5 + Math.floor(rand() * 200)
+      const metadata = buildRandomMetadata(rand, numPapers)
+      const index = buildFilterIndex(metadata)
+
+      // Randomly pick 0-3 categories to filter on, and maybe a year range.
+      const chosenCats: string[] = []
+      if (rand() < 0.7) {
+        const n = 1 + Math.floor(rand() * 2)
+        for (let j = 0; j < n; j++) chosenCats.push(ALL_CATS[Math.floor(rand() * ALL_CATS.length)])
+      }
+      const hasYearRange = rand() < 0.7
+      const yearRange: [number, number] | null = hasYearRange
+        ? [1990 + Math.floor(rand() * 10), 2015 + Math.floor(rand() * 15)]
+        : null
+      const filters = { categories: chosenCats, yearRange }
+
+      const selected = selectedCategoryIds(index, chosenCats)
+
+      for (let i = 0; i < numPapers; i++) {
+        const want = passesFilters(metadata, i, filters)
+        const got = passesFiltersFast(index, i, selected, yearRange)
+        expect(got).toBe(want)
+      }
+    }
+  })
+
+  it('selectedCategoryIds returns null for an empty category list, matching the "no filter" case', () => {
+    const metadata: Metadata = {
+      titles: ['A'],
+      arxiv_ids: ['2301.00001'],
+      categories: ['cs.LG'],
+    }
+    const index = buildFilterIndex(metadata)
+    expect(selectedCategoryIds(index, [])).toBeNull()
+    expect(passesFiltersFast(index, 0, null, null)).toBe(true)
+  })
+
+  it('a selected category with no match in the index excludes every paper, like an unknown string filter would', () => {
+    const metadata: Metadata = {
+      titles: ['A', 'B'],
+      arxiv_ids: ['2301.00001', '2301.00002'],
+      categories: ['cs.LG', 'cs.AI'],
+    }
+    const index = buildFilterIndex(metadata)
+    const selected = selectedCategoryIds(index, ['q-bio.XX']) // not present anywhere
+    expect(passesFiltersFast(index, 0, selected, null)).toBe(false)
+    expect(passesFiltersFast(index, 1, selected, null)).toBe(false)
+  })
+
+  it('OR semantics: a paper matches if it has ANY selected category, not all of them', () => {
+    const metadata: Metadata = {
+      titles: ['A', 'B', 'C'],
+      arxiv_ids: ['2301.00001', '2301.00002', '2301.00003'],
+      categories: ['cs.LG cs.AI', 'math.CO', 'cs.LG'],
+    }
+    const index = buildFilterIndex(metadata)
+    const selected = selectedCategoryIds(index, ['cs.AI', 'math.CO'])
+    expect(passesFiltersFast(index, 0, selected, null)).toBe(true) // has cs.AI
+    expect(passesFiltersFast(index, 1, selected, null)).toBe(true) // has math.CO
+    expect(passesFiltersFast(index, 2, selected, null)).toBe(false) // has neither
+  })
+
+  it('a malformed arXiv id gets year 0, which fails any real year range, matching yearFromArxivId', () => {
+    const metadata: Metadata = {
+      titles: ['A'],
+      arxiv_ids: ['not-an-id'],
+      categories: ['cs.LG'],
+    }
+    const index = buildFilterIndex(metadata)
+    expect(index.years[0]).toBe(0)
+    expect(passesFiltersFast(index, 0, null, [2020, 2024])).toBe(false)
+  })
+
+  it('handles an empty metadata set', () => {
+    const metadata: Metadata = { titles: [], arxiv_ids: [], categories: [] }
+    const index = buildFilterIndex(metadata)
+    expect(index.catIds.length).toBe(0)
+    expect(index.catOffsets).toEqual(new Uint32Array([0]))
+    expect(index.years.length).toBe(0)
   })
 })
