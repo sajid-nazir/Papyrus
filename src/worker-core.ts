@@ -9,7 +9,7 @@ import {
 } from '@huggingface/transformers'
 import { getCached, setCache, clearCacheEntry, clearCacheExceptPrefix } from './lib/indexeddb-cache'
 import {
-  hammingDistance, toUBinary, passesFilters, scanTopK,
+  hammingDistance, hammingDistanceAt, toUBinary, scanTopK,
   buildFilterIndex, selectedCategoryIds, passesFiltersFast,
   type Metadata, type FilterIndex,
 } from './lib/binary-search-utils'
@@ -682,6 +682,10 @@ export function createSearchWorker(config: ModelConfig): void {
             const numPapers = metadata.titles.length
             const neighborsPerSeed = 4
             const maxNodes = 50
+            // Built once for the whole request, not once per seed — filters
+            // don't change between seeds in the same build-graph call.
+            const selectedCats = selectedCategoryIds(filterIndex!, filters?.categories ?? [])
+            const yearRange = filters?.yearRange ?? null
 
             const nodeIdxs = new Set(seedIdxs)
 
@@ -694,9 +698,8 @@ export function createSearchWorker(config: ModelConfig): void {
               const best: Array<{ idx: number; dist: number }> = []
               for (let i = 0; i < numPapers; i++) {
                 if (i === seedIdx) continue
-                if (!passesFilters(metadata, i, filters)) continue
-                const paperBinary = binaryIndex.subarray(i * bytesPerPaper, (i + 1) * bytesPerPaper)
-                const dist = hammingDistance(seedBinary, paperBinary)
+                if (!passesFiltersFast(filterIndex!, i, selectedCats, yearRange)) continue
+                const dist = hammingDistanceAt(seedBinary, binaryIndex, i * bytesPerPaper, bytesPerPaper)
                 // nodeIdxs.has(i) only needs checking once a candidate is
                 // actually competitive enough to matter (at most a handful
                 // of times per scan, as `best` fills and gets displaced) —

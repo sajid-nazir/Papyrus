@@ -29,9 +29,10 @@ export function hammingDistance(a: Uint8Array, b: Uint8Array): number {
 
 // Same math as hammingDistance, but reads directly out of a big backing
 // array at a byte offset instead of requiring a pre-sliced Uint8Array —
-// used in scanTopK's hot loop so it never has to call .subarray() (which
-// allocates a new view object) once per paper, up to ~1M times per search.
-function hammingDistanceAt(query: Uint8Array, index: Uint8Array, offset: number, len: number): number {
+// used in scanTopK's hot loop (and build-graph's) so it never has to call
+// .subarray() (which allocates a new view object) once per paper, up to
+// ~1M times per search.
+export function hammingDistanceAt(query: Uint8Array, index: Uint8Array, offset: number, len: number): number {
   let dist = 0
   for (let i = 0; i < len; i++) {
     dist += POPCOUNT[query[i] ^ index[offset + i]]

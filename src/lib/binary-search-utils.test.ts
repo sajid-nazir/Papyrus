@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  hammingDistance, toUBinary, yearFromArxivId, passesFilters, scanTopK,
+  hammingDistance, hammingDistanceAt, toUBinary, yearFromArxivId, passesFilters, scanTopK,
   buildFilterIndex, selectedCategoryIds, passesFiltersFast,
   type Metadata,
 } from './binary-search-utils'
@@ -21,6 +21,25 @@ describe('hammingDistance', () => {
     const a = new Uint8Array([0b00000001])
     const b = new Uint8Array([0b00000000])
     expect(hammingDistance(a, b)).toBe(1)
+  })
+})
+
+describe('hammingDistanceAt', () => {
+  it('matches hammingDistance against the equivalent subarray, at various offsets', () => {
+    // 3 papers of 2 bytes each, packed into one backing array.
+    const index = new Uint8Array([
+      0b00000000, 0b00000000, // paper 0
+      0b11111111, 0b00000000, // paper 1
+      0b10101010, 0b01010101, // paper 2
+    ])
+    const query = new Uint8Array([0b11110000, 0b00001111])
+
+    for (let paper = 0; paper < 3; paper++) {
+      const offset = paper * 2
+      const viaSubarray = hammingDistance(query, index.subarray(offset, offset + 2))
+      const viaOffset = hammingDistanceAt(query, index, offset, 2)
+      expect(viaOffset).toBe(viaSubarray)
+    }
   })
 })
 
