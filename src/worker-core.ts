@@ -686,14 +686,21 @@ export function createSearchWorker(config: ModelConfig): void {
               // the full-sort version blocked the worker for seconds.
               const best: Array<{ idx: number; dist: number }> = []
               for (let i = 0; i < numPapers; i++) {
-                if (i === seedIdx || nodeIdxs.has(i)) continue
+                if (i === seedIdx) continue
                 if (!passesFilters(metadata, i, filters)) continue
                 const paperBinary = binaryIndex.subarray(i * bytesPerPaper, (i + 1) * bytesPerPaper)
                 const dist = hammingDistance(seedBinary, paperBinary)
+                // nodeIdxs.has(i) only needs checking once a candidate is
+                // actually competitive enough to matter (at most a handful
+                // of times per scan, as `best` fills and gets displaced) —
+                // not on all ~numPapers iterations, which is where it was
+                // before. Same result, just far fewer Set lookups.
                 if (best.length < neighborsPerSeed) {
+                  if (nodeIdxs.has(i)) continue
                   best.push({ idx: i, dist })
                   if (best.length === neighborsPerSeed) best.sort((a, b) => a.dist - b.dist)
                 } else if (dist < best[best.length - 1].dist) {
+                  if (nodeIdxs.has(i)) continue
                   best[best.length - 1] = { idx: i, dist }
                   for (let j = best.length - 1; j > 0 && best[j].dist < best[j - 1].dist; j--) {
                     [best[j], best[j - 1]] = [best[j - 1], best[j]]
