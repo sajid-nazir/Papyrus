@@ -8,7 +8,7 @@ import {
   type PreTrainedModel,
 } from '@huggingface/transformers'
 import { getCached, setCache, clearCacheEntry, clearCacheExceptPrefix } from './lib/indexeddb-cache'
-import { hammingDistance, toUBinary, passesFilters, type Metadata } from './lib/binary-search-utils'
+import { hammingDistance, toUBinary, passesFilters, scanTopK, type Metadata } from './lib/binary-search-utils'
 
 interface ChunkManifest {
   version: string
@@ -316,6 +316,11 @@ function majorityVoteBinary(vectors: Uint8Array[], numBytes: number): Uint8Array
 export function createSearchWorker(config: ModelConfig): void {
   let binaryIndex: Uint8Array | null = null
   let metadata: Metadata | null = null
+  // One scratch buffer, sized once the paper count is known and reused
+  // across every search — scanTopK overwrites every entry on each call,
+  // so there's no stale-data risk, and it avoids a fresh ~2MB allocation
+  // per search.
+  let distScratch: Uint16Array | null = null
   let currentRequestId = 0
   // Separate from currentRequestId: build-graph must not overwrite the id
   // search/find-similar stale-check against, since the graph can be
@@ -348,17 +353,12 @@ export function createSearchWorker(config: ModelConfig): void {
     const bytesPerPaper = config.dimension / 8
     const queryBinary = binaryIndex!.slice(idx * bytesPerPaper, (idx + 1) * bytesPerPaper)
     const numPapers = metadata!.titles.length
-    const candidateResults: Array<{ idx: number; dist: number }> = []
 
-    for (let i = 0; i < numPapers; i++) {
-      if (i === idx) continue
-      if (!passesFilters(metadata!, i, filters)) continue
-      const paperBinary = binaryIndex!.subarray(i * bytesPerPaper, (i + 1) * bytesPerPaper)
-      candidateResults.push({ idx: i, dist: hammingDistance(queryBinary, paperBinary) })
-    }
-
-    candidateResults.sort((a, b) => a.dist - b.dist)
-    const topCandidates = candidateResults.slice(0, candidates)
+    const topCandidates = scanTopK(
+      queryBinary, binaryIndex!, bytesPerPaper, numPapers, config.dimension, candidates,
+      distScratch!,
+      (i) => i !== idx && passesFilters(metadata!, i, filters)
+    )
 
     const hammingResults = topCandidates.slice(0, topK).map((c, i) => ({
       rank: i + 1,
@@ -420,6 +420,7 @@ export function createSearchWorker(config: ModelConfig): void {
           self.postMessage({ type: 'substep', payload: 'loading-memory' })
           const metaText = new TextDecoder().decode(metaBuffer)
           metadata = JSON.parse(metaText)
+          distScratch = new Uint16Array(metadata!.titles.length)
 
           self.postMessage({
             type: 'index-loaded',
@@ -505,17 +506,12 @@ export function createSearchWorker(config: ModelConfig): void {
 
           const bytesPerPaper = config.dimension / 8
           const numPapers = metadata.titles.length
-          const candidateResults: Array<{ idx: number; dist: number }> = []
 
-          for (let i = 0; i < numPapers; i++) {
-            if (!passesFilters(metadata, i, filters)) continue
-            const paperBinary = binaryIndex.subarray(i * bytesPerPaper, (i + 1) * bytesPerPaper)
-            const dist = hammingDistance(binaryQuery, paperBinary)
-            candidateResults.push({ idx: i, dist })
-          }
-
-          candidateResults.sort((a, b) => a.dist - b.dist)
-          const topCandidates = candidateResults.slice(0, candidates)
+          const topCandidates = scanTopK(
+            binaryQuery, binaryIndex, bytesPerPaper, numPapers, config.dimension, candidates,
+            distScratch!,
+            (i) => passesFilters(metadata!, i, filters)
+          )
 
           if (topCandidates.length === 0) {
             self.postMessage({ type: 'results', payload: [], requestId })
@@ -622,19 +618,15 @@ export function createSearchWorker(config: ModelConfig): void {
           const combined = majorityVoteBinary(seedVectors, bytesPerPaper)
 
           const numPapers = metadata.titles.length
-          const candidateResults: Array<{ idx: number; dist: number }> = []
-          for (let i = 0; i < numPapers; i++) {
-            if (seedSet.has(i)) continue
-            if (!passesFilters(metadata, i, filters)) continue
-            const paperBinary = binaryIndex.subarray(i * bytesPerPaper, (i + 1) * bytesPerPaper)
-            candidateResults.push({ idx: i, dist: hammingDistance(combined, paperBinary) })
-          }
-          candidateResults.sort((a, b) => a.dist - b.dist)
           // No reranking here — a cross-encoder pass needs one text to
           // compare each candidate against, and there isn't a single query
           // string for a combined-embedding search. Hamming order on the
           // combined vector is the whole signal for this mode.
-          const topCandidates = candidateResults.slice(0, candidates)
+          const topCandidates = scanTopK(
+            combined, binaryIndex, bytesPerPaper, numPapers, config.dimension, candidates,
+            distScratch!,
+            (i) => !seedSet.has(i) && passesFilters(metadata!, i, filters)
+          )
 
           const results = topCandidates.slice(0, topK).map((c, i) => ({
             rank: i + 1,
